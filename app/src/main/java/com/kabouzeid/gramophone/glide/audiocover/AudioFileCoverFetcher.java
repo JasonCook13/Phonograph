@@ -41,7 +41,7 @@ public class AudioFileCoverFetcher implements DataFetcher<InputStream> {
                 stream = AudioFileCoverUtils.fallback(model.filePath);
             }
         } finally {
-            retriever.release();
+            try { retriever.release(); } catch (Exception ignored) { }
         }
 
         return stream;
