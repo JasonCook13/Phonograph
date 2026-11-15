@@ -1,5 +1,3 @@
-import javax.annotation.Nullable
-
 apply plugin: 'com.android.application'
 
 static def gitBranch() {
@@ -20,62 +18,54 @@ static def gitBranch() {
     branch
 }
 
-def getProperties(String fileName) {
-    final Properties properties = new Properties()
-    def file = file(fileName)
-    if (file.exists()) {
-        file.withInputStream { stream -> properties.load(stream) }
-    }
-    return properties
-}
-
-static def getProperty(@Nullable Properties properties, String name) {
-    return properties.getProperty(name) ?: "$name missing"
-}
-
 android {
-    compileSdkVersion 29
-    buildToolsVersion '29.0.3'
+    namespace 'com.kabouzeid.gramophone'
+    compileSdk 34
+
     defaultConfig {
-        minSdkVersion 16
+        minSdkVersion 21
+        // Kept at 29 for now: the next step (Media3 + new permission model) raises this.
         targetSdkVersion 29
 
-        renderscriptTargetApi 29
         vectorDrawables.useSupportLibrary = true
 
-        applicationId 'com.kabouzeid.gramophone'
-        versionCode 179
-        versionName '1.3.5'
+        // Own app id so it installs next to (not over) the Play Store / F-Droid Phonograph.
+        applicationId 'com.jasoncook13.phonograph'
+        versionCode 180
+        versionName '1.4.0-jc'
+    }
+    buildFeatures {
+        buildConfig true
     }
     signingConfigs {
-        release {
-            Properties properties = getProperties('/Users/karim/Documents/Phonograph/privatekeys/keystore.properties')
-            storeFile file(getProperty(properties, 'storeFile'))
-            keyAlias getProperty(properties, 'keyAlias')
-            storePassword getProperty(properties, 'storePassword')
-            keyPassword getProperty(properties, 'keyPassword')
+        // A fixed key committed to the repo so every CI build can update the
+        // previous install. Fine for a personal sideloaded app; don't reuse it elsewhere.
+        personal {
+            storeFile rootProject.file('keystore/personal.keystore')
+            storePassword 'phonograph'
+            keyAlias 'phonograph'
+            keyPassword 'phonograph'
         }
     }
     buildTypes {
         release {
-            minifyEnabled true
-            shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.release
+            minifyEnabled false
+            signingConfig signingConfigs.personal
         }
         debug {
-            applicationIdSuffix '.debug'
+            signingConfig signingConfigs.personal
             versionNameSuffix ' (' + defaultConfig.versionCode + ') DEBUG (' + gitBranch() + ')'
         }
     }
     packagingOptions {
-        exclude 'META-INF/LICENSE'
-        exclude 'META-INF/NOTICE'
+        resources {
+            excludes += ['META-INF/LICENSE', 'META-INF/NOTICE', 'META-INF/DEPENDENCIES']
+        }
     }
-    lintOptions {
-        disable 'MissingTranslation'
-        disable 'InvalidPackage'
+    lint {
+        disable 'MissingTranslation', 'InvalidPackage'
         abortOnError false
+        checkReleaseBuilds false
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
@@ -103,7 +93,7 @@ dependencies {
     implementation 'com.github.kabouzeid:AndroidSlidingUpPanel:6'
     implementation 'com.afollestad.material-dialogs:core:0.9.6.0'
     implementation 'com.afollestad.material-dialogs:commons:0.9.6.0'
-    implementation 'com.afollestad:material-cab:0.1.12'
+    // material-cab 0.1.12 is vendored under com.afollestad.materialcab (it only lived on JCenter)
     implementation 'com.github.ksoichiro:android-observablescrollview:1.6.0'
     implementation 'com.heinrichreimersoftware:material-intro:2.0.0'
     implementation 'me.zhanghai.android.materialprogressbar:library:1.6.1'
