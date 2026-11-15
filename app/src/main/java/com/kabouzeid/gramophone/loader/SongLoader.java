@@ -41,8 +41,9 @@ public class SongLoader {
     protected static final String[] PROJECTION_WITH_ALBUM_ARTIST;
 
     static {
-        PROJECTION_WITH_ALBUM_ARTIST = Arrays.copyOf(BASE_PROJECTION, BASE_PROJECTION.length + 1);
+        PROJECTION_WITH_ALBUM_ARTIST = Arrays.copyOf(BASE_PROJECTION, BASE_PROJECTION.length + 2);
         PROJECTION_WITH_ALBUM_ARTIST[BASE_PROJECTION.length] = ALBUM_ARTIST; // 11
+        PROJECTION_WITH_ALBUM_ARTIST[BASE_PROJECTION.length + 1] = AudioColumns.COMPOSER; // 12
     }
 
     @NonNull
@@ -126,7 +127,10 @@ public class SongLoader {
         final int albumArtistIndex = cursor.getColumnIndex(ALBUM_ARTIST);
         final String albumArtistName = albumArtistIndex >= 0 ? cursor.getString(albumArtistIndex) : null;
 
-        Song song = new Song(id, title, trackNumber, year, duration, data, dateModified, albumId, albumName, artistId, artistName, albumArtistName);
+        final int composerIndex = cursor.getColumnIndex(AudioColumns.COMPOSER);
+        final String composer = composerIndex >= 0 ? cursor.getString(composerIndex) : null;
+
+        Song song = new Song(id, title, trackNumber, year, duration, data, dateModified, albumId, albumName, artistId, artistName, albumArtistName, composer);
         return clean ? LibraryCleanup.clean(song) : song;
     }
 

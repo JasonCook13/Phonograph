@@ -190,6 +190,9 @@ public class MainActivity extends AbsSlidingMusicPanelActivity {
                         dialog.show(getSupportFragmentManager(), "SCAN_MEDIA_FOLDER_CHOOSER");
                     }, 200);
                     break;
+                case R.id.nav_composers:
+                    new Handler().postDelayed(() -> startActivity(new Intent(MainActivity.this, ComposersActivity.class)), 200);
+                    break;
                 case R.id.nav_cleanup:
                     new Handler().postDelayed(() -> startActivity(new Intent(MainActivity.this, LibraryCleanupActivity.class)), 200);
                     break;

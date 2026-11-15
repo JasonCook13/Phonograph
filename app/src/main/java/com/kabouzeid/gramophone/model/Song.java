@@ -25,13 +25,21 @@ public class Song implements Parcelable {
     /** Album artist tag; null if the file has none (or the device doesn't expose it). */
     @Nullable
     public final String albumArtistName;
+    /** Composer tag; null if the file has none. */
+    @Nullable
+    public final String composer;
 
     public Song(long id, String title, int trackNumber, int year, long duration, String data, long dateModified, long albumId, String albumName, long artistId, String artistName) {
-        this(id, title, trackNumber, year, duration, data, dateModified, albumId, albumName, artistId, artistName, null);
+        this(id, title, trackNumber, year, duration, data, dateModified, albumId, albumName, artistId, artistName, null, null);
     }
 
     public Song(long id, String title, int trackNumber, int year, long duration, String data, long dateModified, long albumId, String albumName, long artistId, String artistName, @Nullable String albumArtistName) {
+        this(id, title, trackNumber, year, duration, data, dateModified, albumId, albumName, artistId, artistName, albumArtistName, null);
+    }
+
+    public Song(long id, String title, int trackNumber, int year, long duration, String data, long dateModified, long albumId, String albumName, long artistId, String artistName, @Nullable String albumArtistName, @Nullable String composer) {
         this.albumArtistName = albumArtistName;
+        this.composer = composer;
         this.id = id;
         this.title = title;
         this.trackNumber = trackNumber;
@@ -120,6 +128,7 @@ public class Song implements Parcelable {
         dest.writeLong(this.artistId);
         dest.writeString(this.artistName);
         dest.writeString(this.albumArtistName);
+        dest.writeString(this.composer);
     }
 
     protected Song(Parcel in) {
@@ -135,6 +144,7 @@ public class Song implements Parcelable {
         this.artistId = in.readLong();
         this.artistName = in.readString();
         this.albumArtistName = in.readString();
+        this.composer = in.readString();
     }
 
     public static final Creator<Song> CREATOR = new Creator<Song>() {

@@ -29,6 +29,9 @@ public class App extends Application {
                     .commit();
         }
 
+        // Load the composer chronologies in the background (used by Smart library and Composers).
+        new Thread(() -> com.kabouzeid.gramophone.classical.ChronologyLoader.get(this), "ChronologyLoader").start();
+
         // Set up dynamic shortcuts
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
             new DynamicShortcutManager(this).initDynamicShortcuts();

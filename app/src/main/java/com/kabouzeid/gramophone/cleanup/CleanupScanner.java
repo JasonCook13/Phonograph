@@ -83,7 +83,8 @@ public final class CleanupScanner {
                     get(tag, FieldKey.ALBUM),
                     get(tag, FieldKey.ALBUM_ARTIST),
                     trackOnly(get(tag, FieldKey.TRACK)),
-                    !tag.getArtworkList().isEmpty());
+                    !tag.getArtworkList().isEmpty(),
+                    get(tag, FieldKey.COMPOSER));
         } catch (Throwable t) {
             Log.w(TAG, "Can't read tags of " + song.data + ": " + t);
             return null;

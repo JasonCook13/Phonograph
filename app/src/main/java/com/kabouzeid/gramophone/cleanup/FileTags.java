@@ -9,10 +9,16 @@ public class FileTags {
     public final String album;
     public final String albumArtist;
     public final String track;
+    public final String composer;
     public final boolean hasArtwork;
 
     public FileTags(long id, String path, String title, String artist, String album,
                     String albumArtist, String track, boolean hasArtwork) {
+        this(id, path, title, artist, album, albumArtist, track, hasArtwork, "");
+    }
+
+    public FileTags(long id, String path, String title, String artist, String album,
+                    String albumArtist, String track, boolean hasArtwork, String composer) {
         this.id = id;
         this.path = path;
         this.title = nz(title);
@@ -21,6 +27,7 @@ public class FileTags {
         this.albumArtist = nz(albumArtist);
         this.track = nz(track);
         this.hasArtwork = hasArtwork;
+        this.composer = nz(composer);
     }
 
     private static String nz(String s) {

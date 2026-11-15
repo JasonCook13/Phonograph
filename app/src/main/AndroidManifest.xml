@@ -124,6 +124,7 @@
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <activity android:name=".ui.activities.PurchaseActivity" />
         <activity android:name=".ui.activities.LibraryCleanupActivity" />
+        <activity android:name=".ui.activities.ComposersActivity" />
 
         <service
             android:name=".service.MusicService"

@@ -227,7 +227,7 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
             });
             s.files = result.files;
             s.unreadable = result.unreadable;
-            List<AlbumFix> fixes = CleanupPlanner.plan(s.files, s.enabled, new CleanupScanner.FolderCovers());
+            List<AlbumFix> fixes = CleanupPlanner.plan(s.files, s.enabled, new CleanupScanner.FolderCovers(), composers(app));
             main.post(() -> {
                 s.fixes = fixes;
                 restoreDecisions(s);
@@ -237,11 +237,20 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
         });
     }
 
+    /** Classical detection for the planner: composer tag, composer folders, known composers. */
+    private static CleanupPlanner.ComposerLookup composers(android.content.Context app) {
+        final com.kabouzeid.gramophone.classical.Chronology chronology =
+                com.kabouzeid.gramophone.classical.ChronologyLoader.get(app);
+        return f -> com.kabouzeid.gramophone.classical.ClassicalParser.composerOf(
+                chronology, f.title, f.artist, f.albumArtist, f.composer, f.path);
+    }
+
     private void replan() {
         final Session s = session;
         final EnumSet<Category> enabled = EnumSet.copyOf(s.enabled);
+        final android.content.Context app = getApplicationContext();
         EXECUTOR.execute(() -> {
-            List<AlbumFix> fixes = CleanupPlanner.plan(s.files, enabled, new CleanupScanner.FolderCovers());
+            List<AlbumFix> fixes = CleanupPlanner.plan(s.files, enabled, new CleanupScanner.FolderCovers(), composers(app));
             main.post(() -> {
                 s.fixes = fixes;
                 restoreDecisions(s);
@@ -676,7 +685,7 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
             case TRACK:
                 return "track number " + c.newValue;
             default:
-                String field = c.field == Change.Field.ALBUM_ARTIST ? "album artist" : c.field.name().toLowerCase();
+                String field = c.field == Change.Field.ALBUM_ARTIST ? "album artist" : c.field.name().toLowerCase(java.util.Locale.ROOT);
                 return c.oldValue.isEmpty()
                         ? field + " → \"" + c.newValue + "\""
                         : field + " \"" + c.oldValue + "\" → \"" + c.newValue + "\"";

@@ -143,6 +143,7 @@ public final class TagWriter {
             case ALBUM: return FieldKey.ALBUM;
             case ALBUM_ARTIST: return FieldKey.ALBUM_ARTIST;
             case TRACK: return FieldKey.TRACK;
+            case COMPOSER: return FieldKey.COMPOSER;
             default: throw new IllegalArgumentException(String.valueOf(field));
         }
     }

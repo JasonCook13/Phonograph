@@ -321,4 +321,5 @@
     <string name="cleanup_skip">Skip</string>
     <string name="cleanup_undo_skip">Include</string>
     <string name="cleanup_fix_all">Fix all</string>
+    <string name="composers">Composers</string>
 </resources>

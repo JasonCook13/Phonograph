@@ -2,7 +2,7 @@ package com.kabouzeid.gramophone.cleanup;
 
 /** One proposed tag change to one file. */
 public class Change {
-    public enum Field {TITLE, ARTIST, ALBUM, ALBUM_ARTIST, TRACK, ARTWORK}
+    public enum Field {TITLE, ARTIST, ALBUM, ALBUM_ARTIST, TRACK, ARTWORK, COMPOSER}
 
     public final FileTags file;
     public final Field field;

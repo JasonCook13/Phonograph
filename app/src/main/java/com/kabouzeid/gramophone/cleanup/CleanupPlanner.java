@@ -26,6 +26,19 @@ public final class CleanupPlanner {
         String findCover(String folderPath);
     }
 
+    /** Says whether a file is classical and who its composer is (display name), or null. */
+    public interface ComposerLookup {
+        String composerOf(FileTags file);
+    }
+
+    public static final String VARIOUS_COMPOSERS = "Various Composers";
+
+    /** Album names shared by unrelated albums; never treat them as one compilation. */
+    private static final java.util.Set<String> GENERIC_ALBUMS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "greatest hits", "best of", "hits", "live", "singles", "single", "unknown", "unknown album",
+            "untitled", "demo", "demos", "b sides", "rarities", "remixes", "ep", "collection", "gold",
+            "essential", "anthology", "love songs", "the best", "christmas", "soundtrack", "music"));
+
     private static final Pattern FEAT_SPLIT = Pattern.compile(
             "^(.*?)\\s*[(\\[]?\\s*\\b(?:feat\\.?|ft\\.?|featuring)\\s+(.+?)\\s*[)\\]]?\\s*$",
             Pattern.CASE_INSENSITIVE);
@@ -40,7 +53,9 @@ public final class CleanupPlanner {
     /** Mutable working copy of one file's tags while the rules run. */
     private static final class Work {
         final FileTags orig;
-        String title, artist, album, albumArtist, track;
+        String title, artist, album, albumArtist, track, composer;
+        /** Composer display name if this is classical music, else null. */
+        String classicalComposer;
         final List<Change> changes = new ArrayList<>();
 
         Work(FileTags f) {
@@ -50,6 +65,7 @@ public final class CleanupPlanner {
             album = f.album;
             albumArtist = f.albumArtist;
             track = f.track;
+            composer = f.composer;
         }
 
         void set(Change.Field field, String value, Category cat) {
@@ -60,6 +76,7 @@ public final class CleanupPlanner {
                 case ALBUM: old = album; album = value; break;
                 case ALBUM_ARTIST: old = albumArtist; albumArtist = value; break;
                 case TRACK: old = track; track = value; break;
+                case COMPOSER: old = composer; composer = value; break;
                 default: old = "";
             }
             if (value.equals(old)) return;
@@ -77,8 +94,27 @@ public final class CleanupPlanner {
     }
 
     public static List<AlbumFix> plan(List<FileTags> files, Set<Category> enabled, FolderCoverLookup covers) {
+        return plan(files, enabled, covers, null);
+    }
+
+    public static List<AlbumFix> plan(List<FileTags> files, Set<Category> enabled, FolderCoverLookup covers,
+                                      ComposerLookup composers) {
         List<Work> works = new ArrayList<>();
-        for (FileTags f : files) works.add(new Work(f));
+        for (FileTags f : files) {
+            Work w = new Work(f);
+            if (composers != null) w.classicalComposer = composers.composerOf(f);
+            works.add(w);
+        }
+
+        // 0. Classical: composer tag from folders / titles. (Classical files are also kept away
+        //    from the pop-music rules below, whether or not this fix is switched on.)
+        if (enabled.contains(Category.CLASSICAL)) {
+            for (Work w : works) {
+                if (w.classicalComposer != null && w.composer.isEmpty()) {
+                    w.set(Change.Field.COMPOSER, w.classicalComposer, Category.CLASSICAL);
+                }
+            }
+        }
 
         // 1. Missing artist / album from Artist/Album/track folders.
         if (enabled.contains(Category.MISSING_INFO)) {
@@ -92,7 +128,8 @@ public final class CleanupPlanner {
                 if (LibraryCleanup.isUnknown(w.album) && !LibraryCleanup.isGeneric(parent)) {
                     w.set(Change.Field.ALBUM, parent, Category.MISSING_INFO);
                 }
-                if (LibraryCleanup.isUnknown(w.artist) && !LibraryCleanup.isGeneric(parent) && !LibraryCleanup.isGeneric(grand)) {
+                if (w.classicalComposer == null && LibraryCleanup.isUnknown(w.artist)
+                        && !LibraryCleanup.isGeneric(parent) && !LibraryCleanup.isGeneric(grand)) {
                     w.set(Change.Field.ARTIST, grand, Category.MISSING_INFO);
                 }
             }
@@ -112,6 +149,7 @@ public final class CleanupPlanner {
         // 3. "Artist feat. X" -> artist "Artist", title "Song (feat. X)".
         if (enabled.contains(Category.FEATURED)) {
             for (Work w : works) {
+                if (w.classicalComposer != null) continue;
                 Matcher m = FEAT_SPLIT.matcher(w.artist);
                 if (!m.matches()) continue;
                 String main = m.group(1).trim();
@@ -140,6 +178,17 @@ public final class CleanupPlanner {
             }
         }
 
+        // Library-wide: which artists and folders each album name appears with (compilations
+        // whose songs are filed in each artist's folder).
+        Map<String, Set<String>> albumArtistsByName = new HashMap<>();
+        Map<String, Set<String>> albumFoldersByName = new HashMap<>();
+        for (Work w : works) {
+            String name = LibraryCleanup.normalize(w.album);
+            if (name.isEmpty()) continue;
+            add(albumArtistsByName, name, LibraryCleanup.normalize(LibraryCleanup.primaryArtist(w.artist)));
+            add(albumFoldersByName, name, parentPath(w.orig.path));
+        }
+
         // 5. Per album (same album name in the same folder).
         Map<String, List<Work>> groups = new LinkedHashMap<>();
         for (Work w : works) {
@@ -164,8 +213,35 @@ public final class CleanupPlanner {
                 for (Work w : g) w.set(Change.Field.ALBUM, best, Category.SPELLING);
             }
 
-            if (realAlbum && enabled.contains(Category.ALBUM_ARTIST)) {
-                String albumArtist = albumArtistFor(g);
+            int classicalCount = 0;
+            Set<String> groupComposers = new java.util.HashSet<>();
+            for (Work w : g) {
+                if (w.classicalComposer != null) {
+                    classicalCount++;
+                    groupComposers.add(w.classicalComposer);
+                }
+            }
+            boolean classical = classicalCount * 2 > g.size();
+
+            if (realAlbum && classical) {
+                // Classical: the composer is the album artist (several composers -> "Various Composers").
+                if (enabled.contains(Category.CLASSICAL)) {
+                    String albumArtist = groupComposers.size() == 1 ? groupComposers.iterator().next() : VARIOUS_COMPOSERS;
+                    for (Work w : g) w.set(Change.Field.ALBUM_ARTIST, albumArtist, Category.CLASSICAL);
+                }
+            } else if (realAlbum && enabled.contains(Category.ALBUM_ARTIST)) {
+                String name = LibraryCleanup.normalize(g.get(0).album);
+                Set<String> folders = albumFoldersByName.get(name);
+                Set<String> artistsEverywhere = albumArtistsByName.get(name);
+                String albumArtist;
+                if (folders != null && folders.size() > 1 && !GENERIC_ALBUMS.contains(name)) {
+                    // Same album name in several folders: a compilation filed by artist (three or more
+                    // artists) gets "Various Artists"; otherwise leave it alone rather than guess.
+                    albumArtist = artistsEverywhere != null && artistsEverywhere.size() >= 3
+                            ? LibraryCleanup.VARIOUS_ARTISTS : "";
+                } else {
+                    albumArtist = albumArtistFor(g);
+                }
                 if (!albumArtist.isEmpty()) {
                     for (Work w : g) w.set(Change.Field.ALBUM_ARTIST, albumArtist, Category.ALBUM_ARTIST);
                 }
@@ -268,12 +344,43 @@ public final class CleanupPlanner {
         inc(m, value);
     }
 
+    /**
+     * Spelling to use for each artist, only where it's clear: one spelling is used more often
+     * than any other, or the spellings differ only in capitals. Ties between genuinely
+     * different spellings (accents, punctuation) are left alone.
+     */
     private static Map<String, String> pickCanonical(Map<String, Map<String, Integer>> spellings) {
         Map<String, String> result = new HashMap<>();
         for (Map.Entry<String, Map<String, Integer>> e : spellings.entrySet()) {
-            if (e.getValue().size() > 1) result.put(e.getKey(), best(e.getValue()));
+            Map<String, Integer> variants = e.getValue();
+            if (variants.size() < 2) continue;
+            int top = -1, second = -1;
+            for (int c : variants.values()) {
+                if (c > top) {
+                    second = top;
+                    top = c;
+                } else if (c > second) {
+                    second = c;
+                }
+            }
+            boolean caseOnly = true;
+            String first = null;
+            for (String v : variants.keySet()) {
+                if (first == null) first = v;
+                else if (!v.equalsIgnoreCase(first)) caseOnly = false;
+            }
+            if (top > second || caseOnly) result.put(e.getKey(), best(variants));
         }
         return result;
+    }
+
+    private static void add(Map<String, Set<String>> m, String k, String v) {
+        Set<String> s = m.get(k);
+        if (s == null) {
+            s = new java.util.HashSet<>();
+            m.put(k, s);
+        }
+        s.add(v);
     }
 
     /** Most frequent value; ties go to the "richer" spelling (capitals, accents, "The ..."). */
@@ -295,7 +402,6 @@ public final class CleanupPlanner {
         int r = 0;
         for (char ch : s.toCharArray()) {
             if (Character.isUpperCase(ch)) r += 2;
-            if (ch > 127) r += 3;
         }
         if (s.toLowerCase(Locale.ROOT).startsWith("the ")) r += 1;
         if (s.equals(s.toUpperCase(Locale.ROOT)) && s.length() > 3) r -= 100; // ALL CAPS loses

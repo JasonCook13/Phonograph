@@ -84,7 +84,7 @@ public final class LibraryCleanup {
 
         return new Song(song.id, title, song.trackNumber, song.year, song.duration, song.data,
                 song.dateModified, song.albumId, album == null ? "" : album, song.artistId,
-                artist == null ? "" : artist, albumArtist);
+                artist == null ? "" : artist, albumArtist, song.composer);
     }
 
     @NonNull
@@ -127,6 +127,9 @@ public final class LibraryCleanup {
     @NonNull
     public static String albumArtist(@NonNull List<Song> songs) {
         if (songs.isEmpty()) return "";
+        // Classical: the composer is the album artist.
+        String composer = classicalComposer(songs);
+        if (composer != null) return composer;
         for (Song s : songs) {
             if (!TextUtils.isEmpty(s.albumArtistName)) return s.albumArtistName;
         }
@@ -151,6 +154,25 @@ public final class LibraryCleanup {
         if (counts.size() > 1 && best * 2 <= songs.size()) return VARIOUS_ARTISTS;
         String name = display.get(bestKey);
         return name == null ? songs.get(0).artistName : name;
+    }
+
+    /** The composer if most of these songs are classical (one composer, else "Various Composers"); else null. */
+    @Nullable
+    private static String classicalComposer(@NonNull List<Song> songs) {
+        com.kabouzeid.gramophone.classical.Chronology chronology = com.kabouzeid.gramophone.classical.ChronologyLoader.peek();
+        String found = null;
+        int classical = 0;
+        boolean several = false;
+        for (Song s : songs) {
+            String c = com.kabouzeid.gramophone.classical.ClassicalParser.composerOf(
+                    chronology, s.title, s.artistName, s.albumArtistName, s.composer, s.data);
+            if (c == null) continue;
+            classical++;
+            if (found == null) found = c;
+            else if (!found.equals(c)) several = true;
+        }
+        if (classical * 2 <= songs.size()) return null;
+        return several ? com.kabouzeid.gramophone.cleanup.CleanupPlanner.VARIOUS_COMPOSERS : found;
     }
 
     /** "Drake feat. Future" -> "Drake", "Artist (ft. X)" -> "Artist". */
