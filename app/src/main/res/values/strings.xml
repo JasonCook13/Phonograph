@@ -312,4 +312,13 @@
     <string name="dialog_ringtone_message">Allow phonograph to modify audio settings</string>
     <string name="pref_title_smart_library">Smart library</string>
     <string name="pref_summary_smart_library">Merge split albums and duplicate artists (\"feat.\", spelling), tidy titles taken from file names and fill in missing artist/album names from folders. Your files are not changed.</string>
+    <string name="library_cleanup">Clean up library</string>
+    <string name="cleanup_intro_title">Make your music library consistent</string>
+    <string name="cleanup_intro_body">This scans the tags inside every song on your phone and suggests fixes, album by album:\n\n• Fill in missing artist and album names from your folders\n• Turn file names like \"01 - my_song\" into proper titles\n• Move \"feat.\" artists into the song title so each artist appears once\n• Use one spelling per artist and album\n• Set the album artist so albums don\'t split apart\n• Add missing track numbers from file names\n• Add missing album art from the album\'s other tracks or a cover image in its folder\n\nNothing is changed until you tap Fix on an album, or Fix all. Changes are written into the music files themselves, so they also show up in other players. Every change is recorded in a log file.</string>
+    <string name="cleanup_scan">Scan my music</string>
+    <string name="cleanup_rescan">Scan again</string>
+    <string name="cleanup_fix">Fix</string>
+    <string name="cleanup_skip">Skip</string>
+    <string name="cleanup_undo_skip">Include</string>
+    <string name="cleanup_fix_all">Fix all</string>
 </resources>

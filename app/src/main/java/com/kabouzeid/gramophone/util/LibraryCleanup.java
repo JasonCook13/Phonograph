@@ -32,14 +32,14 @@ import java.util.regex.Pattern;
 public final class LibraryCleanup {
     public static final String VARIOUS_ARTISTS = "Various Artists";
 
-    private static final Pattern FEAT = Pattern.compile(
+    public static final Pattern FEAT = Pattern.compile(
             "\\s*[(\\[]?\\s*\\b(feat\\.?|ft\\.?|featuring)\\s.*$", Pattern.CASE_INSENSITIVE);
     // "1-04 Title", "01 Title", "3. Title", "07_Title" -- but not "99 Problems" or "2 Become 1".
     private static final Pattern LEADING_TRACK_NO = Pattern.compile(
             "^\\s*(?:(?:\\d{1,2}[-.]\\d{1,3}|0\\d{1,2})[\\s._-]+|\\d{1,3}\\s*[-._)]+\\s*)");
     private static final Pattern NON_ALNUM = Pattern.compile("[^\\p{L}\\p{N}]+");
     private static final Pattern DIACRITICS = Pattern.compile("\\p{M}+");
-    private static final Pattern DISC_FOLDER = Pattern.compile("^(cd|disc|disk)\\s*\\d+$", Pattern.CASE_INSENSITIVE);
+    public static final Pattern DISC_FOLDER = Pattern.compile("^(cd|disc|disk)\\s*\\d+$", Pattern.CASE_INSENSITIVE);
 
     /** Folder names that are containers, never an artist or album. */
     private static final Set<String> GENERIC_FOLDERS = new HashSet<>(Arrays.asList(
@@ -88,7 +88,7 @@ public final class LibraryCleanup {
     }
 
     @NonNull
-    static String cleanTitle(@Nullable String title, @Nullable String path) {
+    public static String cleanTitle(@Nullable String title, @Nullable String path) {
         if (title == null) title = "";
         String fileName = fileNameWithoutExtension(path);
         // MediaStore uses the file name when a file has no title tag.
@@ -163,7 +163,7 @@ public final class LibraryCleanup {
 
     /** Case/accents/punctuation-insensitive comparison key; ignores a leading "The" and "&" vs "and". */
     @NonNull
-    static String normalize(@Nullable String s) {
+    public static String normalize(@Nullable String s) {
         if (s == null) return "";
         String n = Normalizer.normalize(s, Normalizer.Form.NFD);
         n = DIACRITICS.matcher(n).replaceAll("").toLowerCase(Locale.ROOT).trim();
@@ -177,14 +177,14 @@ public final class LibraryCleanup {
     // Path helpers
     // -------------------------------------------------------------------------------------
 
-    private static boolean isUnknown(@Nullable String s) {
+    public static boolean isUnknown(@Nullable String s) {
         if (s == null) return true;
         String t = s.trim().toLowerCase(Locale.ROOT);
         return t.isEmpty() || t.equals("<unknown>") || t.equals("unknown") || t.equals("unknown artist")
                 || t.equals("unknown album");
     }
 
-    private static boolean isGeneric(@Nullable String folder) {
+    public static boolean isGeneric(@Nullable String folder) {
         return folder == null || GENERIC_FOLDERS.contains(folder.trim().toLowerCase(Locale.ROOT));
     }
 
@@ -204,7 +204,7 @@ public final class LibraryCleanup {
 
     /** levels=1 -> containing folder, 2 -> the folder above it, ... */
     @Nullable
-    private static String folderName(@Nullable String path, int levels) {
+    public static String folderName(@Nullable String path, int levels) {
         if (TextUtils.isEmpty(path)) return null;
         File f = new File(path);
         for (int i = 0; i < levels && f != null; i++) f = f.getParentFile();
@@ -212,7 +212,7 @@ public final class LibraryCleanup {
     }
 
     @Nullable
-    private static String fileNameWithoutExtension(@Nullable String path) {
+    public static String fileNameWithoutExtension(@Nullable String path) {
         if (TextUtils.isEmpty(path)) return null;
         String name = new File(path).getName();
         int dot = name.lastIndexOf('.');

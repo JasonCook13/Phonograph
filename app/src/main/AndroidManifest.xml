@@ -123,6 +123,7 @@
             android:launchMode="singleInstance"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <activity android:name=".ui.activities.PurchaseActivity" />
+        <activity android:name=".ui.activities.LibraryCleanupActivity" />
 
         <service
             android:name=".service.MusicService"

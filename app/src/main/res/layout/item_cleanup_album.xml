@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginLeft="8dp"
+    android:layout_marginTop="4dp"
+    android:layout_marginRight="8dp"
+    android:layout_marginBottom="4dp"
+    app:cardCornerRadius="4dp"
+    app:cardElevation="1dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingLeft="16dp"
+        android:paddingTop="12dp"
+        android:paddingRight="8dp"
+        android:paddingBottom="4dp">
+
+        <TextView
+            android:id="@+id/album_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingRight="8dp"
+            android:textAppearance="@style/TextAppearance.AppCompat.Subhead"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/album_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingRight="8dp"
+            android:textAppearance="@style/TextAppearance.AppCompat.Caption" />
+
+        <TextView
+            android:id="@+id/album_changes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:lineSpacingMultiplier="1.15"
+            android:paddingRight="8dp"
+            android:textAppearance="@style/TextAppearance.AppCompat.Body1" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical|end"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/album_status"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textAppearance="@style/TextAppearance.AppCompat.Body2" />
+
+            <Button
+                android:id="@+id/album_skip"
+                style="@style/Widget.AppCompat.Button.Borderless"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/cleanup_skip" />
+
+            <Button
+                android:id="@+id/album_fix"
+                style="@style/Widget.AppCompat.Button.Borderless.Colored"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/cleanup_fix" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

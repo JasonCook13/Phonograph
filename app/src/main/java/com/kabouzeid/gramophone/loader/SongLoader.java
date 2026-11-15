@@ -63,6 +63,20 @@ public class SongLoader {
         return getSong(cursor);
     }
 
+    /** All songs with their tags exactly as MediaStore reports them (no Smart library cleanup). */
+    @NonNull
+    public static List<Song> getAllSongsRaw(@NonNull Context context) {
+        Cursor cursor = makeSongCursor(context, null, null);
+        List<Song> songs = new ArrayList<>();
+        if (cursor != null && cursor.moveToFirst()) {
+            do {
+                songs.add(getSongFromCursorImpl(cursor, false));
+            } while (cursor.moveToNext());
+        }
+        if (cursor != null) cursor.close();
+        return songs;
+    }
+
     @NonNull
     public static List<Song> getSongs(@Nullable final Cursor cursor) {
         List<Song> songs = new ArrayList<>();
@@ -93,6 +107,11 @@ public class SongLoader {
 
     @NonNull
     private static Song getSongFromCursorImpl(@NonNull Cursor cursor) {
+        return getSongFromCursorImpl(cursor, LibraryCleanup.isEnabled());
+    }
+
+    @NonNull
+    private static Song getSongFromCursorImpl(@NonNull Cursor cursor, boolean clean) {
         final long id = cursor.getLong(0);
         final String title = cursor.getString(1);
         final int trackNumber = cursor.getInt(2);
@@ -108,7 +127,7 @@ public class SongLoader {
         final String albumArtistName = albumArtistIndex >= 0 ? cursor.getString(albumArtistIndex) : null;
 
         Song song = new Song(id, title, trackNumber, year, duration, data, dateModified, albumId, albumName, artistId, artistName, albumArtistName);
-        return LibraryCleanup.isEnabled() ? LibraryCleanup.clean(song) : song;
+        return clean ? LibraryCleanup.clean(song) : song;
     }
 
     @Nullable
