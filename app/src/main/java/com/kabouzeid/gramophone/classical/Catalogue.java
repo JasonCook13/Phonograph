@@ -57,12 +57,28 @@ public final class Catalogue {
             new Sys("m", "\\bM\\.\\s*" + NUM),
             new Sys("s", "\\bS\\.\\s*" + NUM),
             new Sys("h", "\\bH\\.\\s*" + NUM),
+            new Sys("bv", "\\bBV\\.?\\s*(?:B\\s*)?" + NUM),
+            new Sys("jb", "\\bJB\\.?\\s*(\\d\\s*:\\s*\\d{1,3}[a-z]?)" + END),
     };
 
     private static final Pattern OPUS = Pattern.compile(
             "\\bOp(?:us|\\.)?\\s*(\\d{1,3}[a-z]?)(?:\\s*,?\\s*(?:No\\.?|Nr\\.?|n\\.|#)\\s*(\\d{1,3}))?",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern OP_SLASH = Pattern.compile("\\bOp(?:us|\\.)?\\s*(\\d{1,3}[a-z]?)\\s*/\\s*(\\d{1,3})", Pattern.CASE_INSENSITIVE);
+
+    private static final Pattern OP_ROMAN = Pattern.compile("\\bOp(?:us|\\.)?\\s*([IVXL]{1,6})(?![\\p{L}])", Pattern.CASE_INSENSITIVE);
+
+    private static int roman(String r) {
+        int total = 0, prev = 0;
+        String u = r.toUpperCase(Locale.ROOT);
+        for (int i = u.length() - 1; i >= 0; i--) {
+            int v = "IVXL".indexOf(u.charAt(i));
+            v = v == 0 ? 1 : v == 1 ? 5 : v == 2 ? 10 : 50;
+            total += v < prev ? -v : v;
+            prev = Math.max(prev, v);
+        }
+        return total;
+    }
 
     private Catalogue() {
     }
@@ -82,6 +98,10 @@ public final class Catalogue {
             keys.add("op " + clean(m.group(1)) + " " + Integer.parseInt(m.group(2)));
             keys.add("op " + clean(m.group(1)));
         }
+        m = OP_ROMAN.matcher(text);
+        while (m.find()) {
+            keys.add("op " + roman(m.group(1)));
+        }
         m = OPUS.matcher(text);
         while (m.find()) {
             if (m.group(2) != null) keys.add("op " + clean(m.group(1)) + " " + Integer.parseInt(m.group(2)));
@@ -92,7 +112,7 @@ public final class Catalogue {
 
     /** "0012" -> "12", "XVI : 52" / "XVI 52" -> "xvi:52". */
     private static String clean(String s) {
-        String t = s.toLowerCase(Locale.ROOT).trim().replaceAll("^([ivxl]+[a-z]?)\\s*(?::\\s*|\\s+)", "$1:").replaceAll("\\s+", "");
+        String t = s.toLowerCase(Locale.ROOT).trim().replaceAll("^([ivxl]+[a-z]?)\\s*(?::\\s*|\\s+)", "$1:").replaceAll("^(\\d)\\s*:\\s*", "$1:").replaceAll("\\s+", "");
         t = t.replaceFirst("^0+(?=\\d)", "");
         return t;
     }
