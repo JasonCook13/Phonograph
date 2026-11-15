@@ -38,10 +38,13 @@ public final class ComposerPlaylists {
      * @return number of songs in the playlist, or -1 if it couldn't be written.
      */
     public static int write(@NonNull Context context, @NonNull ComposerLibrary.Composer composer) {
-        List<Song> songs = songs(composer);
+        return write(context, playlistName(composer), songs(composer));
+    }
+
+    /** Creates or replaces the playlist {@code name} with {@code songs}, in order. Blocking. */
+    public static int write(@NonNull Context context, @NonNull String name, @NonNull List<Song> songs) {
         if (songs.isEmpty()) return 0;
         ContentResolver resolver = context.getContentResolver();
-        String name = playlistName(composer);
         try {
             long id = findOrCreate(resolver, name);
             if (id < 0) return -1;

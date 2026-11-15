@@ -225,7 +225,7 @@ public final class ClassicalParser {
 
         if (composer != null) {
             info.chrono = composer.match(work, info.catalogueKeys);
-            if (info.chrono == null && album != null && !album.isEmpty()) {
+            if (info.chrono == null && album != null && !album.isEmpty() && !isCollection(album) && info.catalogueKeys.isEmpty()) {
                 // Whole album as one work (film scores, single-work albums).
                 info.chrono = composer.match(album, Catalogue.keys(album), true);
                 if (info.chrono != null && split <= 0) {
@@ -268,6 +268,16 @@ public final class ClassicalParser {
             if (c != null && Chronology.norm(candidate).contains(" ")) return c.name;
         }
         return null;
+    }
+
+    private static final Pattern COLLECTION_ALBUM = Pattern.compile(
+            "(?i)\\b(complete|collected|collection|edition|selected|best of|greatest|anthology|works|"
+                    + "sonatas|concertos|concerti|quartets|quintets|trios|symphonies|suites|partitas|songs|lieder|"
+                    + "preludes|etudes|études|waltzes|nocturnes|mazurkas|cantatas|transcriptions|pieces|dances|vol\\.?|volume)\\b");
+
+    /** An album holding many works ("Complete Piano Trios"), which must never be matched as one work. */
+    static boolean isCollection(String album) {
+        return COLLECTION_ALBUM.matcher(album).find();
     }
 
     /** Where the work ends and the movement begins, or -1. */

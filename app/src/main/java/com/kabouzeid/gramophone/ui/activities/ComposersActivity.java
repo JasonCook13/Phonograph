@@ -60,6 +60,7 @@ public class ComposersActivity extends AbsMusicServiceActivity {
     private ProgressBar progress;
     private TextView empty;
     private int accent;
+    private String query = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -74,6 +75,7 @@ public class ComposersActivity extends AbsMusicServiceActivity {
         toolbar.setBackgroundColor(ThemeStore.primaryColor(this));
         toolbar.setPopupTheme(R.style.ThemeOverlay_AppCompat_Light);
         root.addView(toolbar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, actionBarSize()));
+        if (composerName != null) root.addView(searchBar());
         FrameLayout content = new FrameLayout(this);
         root.addView(content, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         list = new RecyclerView(this);
@@ -133,20 +135,121 @@ public class ComposersActivity extends AbsMusicServiceActivity {
             composer = null;
             for (ComposerLibrary.Composer c : library.composers) if (c.name.equals(composerName)) composer = c;
             if (composer != null) {
-                List<ComposerLibrary.Work> works = new ArrayList<>(composer.works);
+                List<ComposerLibrary.Work> works = filtered(composer.works);
                 ComposerLibrary.sortWorks(works, sort);
-                rows.add(new Header());
+                if (query.isEmpty()) rows.add(new Header());
                 for (Map.Entry<String, List<ComposerLibrary.Work>> e : ComposerLibrary.byCategory(works).entrySet()) {
                     rows.add(new Category(e.getKey(), e.getValue()));
                     rows.addAll(e.getValue());
                 }
             }
-            empty.setText("Nothing found for " + composerName + ".");
+            empty.setText(query.isEmpty() ? "Nothing found for " + composerName + "." : "No works match \"" + query + "\".");
         }
         empty.setVisibility(rows.isEmpty() ? View.VISIBLE : View.GONE);
         //noinspection ConstantConditions
         list.getAdapter().notifyDataSetChanged();
         supportInvalidateOptionsMenu();
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Search: "op 10", "trio", "razumovsky", "bwv 1046"
+    // ---------------------------------------------------------------------------------------
+
+    private View searchBar() {
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(16), dp(4), dp(4), dp(4));
+        android.widget.EditText field = new android.widget.EditText(this);
+        field.setHint("Find works: op 10, trio, BWV 1046…");
+        field.setSingleLine(true);
+        field.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        bar.addView(field, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Button play = new Button(this, null, R.attr.borderlessButtonStyle);
+        play.setText("Play");
+        play.setTextColor(accent);
+        Button save = new Button(this, null, R.attr.borderlessButtonStyle);
+        save.setText("Save");
+        save.setTextColor(accent);
+        bar.addView(play);
+        bar.addView(save);
+        field.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence c, int a, int b, int d) {}
+            public void onTextChanged(CharSequence c, int a, int b, int d) {}
+            public void afterTextChanged(android.text.Editable e) {
+                query = e.toString().trim();
+                if (library != null) buildRows();
+            }
+        });
+        play.setOnClickListener(v -> play(ComposerLibrary.tracksInOrder(visibleWorks())));
+        save.setOnClickListener(v -> askPlaylistName(defaultName(query.isEmpty() ? "Works in Order of Composition" : query), visibleWorks()));
+        return bar;
+    }
+
+    /** Works whose title, catalogue number or kind contain every word of the query. */
+    private List<ComposerLibrary.Work> filtered(List<ComposerLibrary.Work> works) {
+        List<ComposerLibrary.Work> out = new ArrayList<>();
+        String[] words = com.kabouzeid.gramophone.classical.Chronology.norm(query).split(" ");
+        for (ComposerLibrary.Work w : works) {
+            if (query.isEmpty()) {
+                out.add(w);
+                continue;
+            }
+            String hay = " " + com.kabouzeid.gramophone.classical.Chronology.norm(w.title + " " + w.catalogue() + " " + w.category) + " ";
+            boolean all = true;
+            for (String word : words) {
+                if (word.isEmpty()) continue;
+                // whole words for numbers ("10" must not match "100"); prefixes for words ("trio" -> "trios")
+                boolean hit = word.matches("\\d+") ? hay.contains(" " + word + " ") : hay.contains(" " + word);
+                if (!hit) {
+                    all = false;
+                    break;
+                }
+            }
+            if (all) out.add(w);
+        }
+        return out;
+    }
+
+    private List<ComposerLibrary.Work> visibleWorks() {
+        List<ComposerLibrary.Work> works = new ArrayList<>();
+        for (Object o : rows) if (o instanceof ComposerLibrary.Work) works.add((ComposerLibrary.Work) o);
+        return works;
+    }
+
+    private String defaultName(String what) {
+        String shortName = composer != null && composer.chrono != null ? capitalize(composer.chrono.sortName()) : composerName;
+        return shortName + ": " + what;
+    }
+
+    private static String capitalize(String s) {
+        StringBuilder sb = new StringBuilder();
+        for (String w : s.split(" ")) {
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(w.isEmpty() ? w : Character.toUpperCase(w.charAt(0)) + w.substring(1));
+        }
+        return sb.toString();
+    }
+
+    /** Asks for a playlist name, then saves these works (one recording each, in order). */
+    private void askPlaylistName(String suggested, List<ComposerLibrary.Work> works) {
+        if (works.isEmpty()) return;
+        final List<Song> songs = ComposerLibrary.tracksInOrder(works);
+        new MaterialDialog.Builder(this)
+                .title("Save as playlist")
+                .content(works.size() + (works.size() == 1 ? " work, " : " works, ") + songs.size() + " tracks")
+                .input("Playlist name", suggested, false, (d, input) -> {
+                    final String name = input.toString().trim();
+                    final android.content.Context app = getApplicationContext();
+                    EXECUTOR.execute(() -> {
+                        int n = ComposerPlaylists.write(app, name, songs);
+                        main.post(() -> Toast.makeText(app, n > 0 ? "Saved \"" + name + "\" (" + n + " tracks)"
+                                : "Couldn't save the playlist", Toast.LENGTH_LONG).show());
+                    });
+                })
+                .positiveText("Save")
+                .negativeText(android.R.string.cancel)
+                .show();
     }
 
     // ---------------------------------------------------------------------------------------
@@ -382,11 +485,18 @@ public class ComposersActivity extends AbsMusicServiceActivity {
             play.setTextColor(accent);
             play.setText("Play in order");
             l.addView(play);
+            save = new Button(ComposersActivity.this, null, R.attr.borderlessButtonStyle);
+            save.setTextColor(accent);
+            save.setText("Save");
+            l.addView(save);
         }
+
+        final Button save;
 
         void bind(Category c) {
             name.setText(c.name + "  (" + c.works.size() + ")");
             play.setOnClickListener(v -> play(ComposerLibrary.tracksInOrder(c.works)));
+            save.setOnClickListener(v -> askPlaylistName(defaultName(c.name), c.works));
         }
     }
 

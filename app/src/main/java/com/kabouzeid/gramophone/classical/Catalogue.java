@@ -35,7 +35,7 @@ public final class Catalogue {
             new Sys("swv", "\\bSWV\\.?\\s*" + NUM),
             new Sys("wab", "\\bWAB\\.?\\s*" + NUM),
             new Sys("mwv", "\\bMWV\\.?\\s*([A-Z]{1,2}\\s*\\d{1,3})"),
-            new Sys("hob", "\\bHob\\.?\\s*([IVXL]+[a-z]?\\s*:\\s*[\\w]+)"),
+            new Sys("hob", "\\bHob\\.?\\s*([IVXL]+[a-z]?(?:\\s*:\\s*|\\s+)[A-Za-z]?\\d{1,3}[a-z]?)"),
             new Sys("rv", "\\bRV\\.?\\s*" + NUM),
             new Sys("lwv", "\\bLWV\\.?\\s*" + NUM),
             new Sys("woo", "\\bWoO\\.?\\s*" + NUM),
@@ -90,9 +90,9 @@ public final class Catalogue {
         return new ArrayList<>(keys);
     }
 
-    /** "0012" -> "12", "XVI : 52" -> "xvi:52". */
+    /** "0012" -> "12", "XVI : 52" / "XVI 52" -> "xvi:52". */
     private static String clean(String s) {
-        String t = s.toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+        String t = s.toLowerCase(Locale.ROOT).trim().replaceAll("^([ivxl]+[a-z]?)\\s*(?::\\s*|\\s+)", "$1:").replaceAll("\\s+", "");
         t = t.replaceFirst("^0+(?=\\d)", "");
         return t;
     }
