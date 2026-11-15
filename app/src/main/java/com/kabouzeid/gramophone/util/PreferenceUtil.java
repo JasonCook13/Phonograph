@@ -220,7 +220,7 @@ public final class PreferenceUtil {
     }
 
     public final boolean gaplessPlayback() {
-        return mPreferences.getBoolean(GAPLESS_PLAYBACK, false);
+        return mPreferences.getBoolean(GAPLESS_PLAYBACK, true);
     }
 
     public final boolean audioDucking() {
