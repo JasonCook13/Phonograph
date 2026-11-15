@@ -16,6 +16,13 @@
             android:summary="@string/pref_summary_remember_last_tab"
             android:title="@string/pref_title_remember_last_tab" />
 
+        <com.kabouzeid.appthemehelper.common.prefs.supportv7.ATESwitchPreference
+            app:iconSpaceReserved="false"
+            android:defaultValue="true"
+            android:key="smart_library"
+            android:summary="@string/pref_summary_smart_library"
+            android:title="@string/pref_title_smart_library" />
+
     </com.kabouzeid.appthemehelper.common.prefs.supportv7.ATEPreferenceCategory>
 
 </androidx.preference.PreferenceScreen>

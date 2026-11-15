@@ -1,5 +1,7 @@
 package com.kabouzeid.gramophone.model;
 
+import androidx.annotation.Nullable;
+
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -20,8 +22,16 @@ public class Song implements Parcelable {
     public final String albumName;
     public final long artistId;
     public final String artistName;
+    /** Album artist tag; null if the file has none (or the device doesn't expose it). */
+    @Nullable
+    public final String albumArtistName;
 
     public Song(long id, String title, int trackNumber, int year, long duration, String data, long dateModified, long albumId, String albumName, long artistId, String artistName) {
+        this(id, title, trackNumber, year, duration, data, dateModified, albumId, albumName, artistId, artistName, null);
+    }
+
+    public Song(long id, String title, int trackNumber, int year, long duration, String data, long dateModified, long albumId, String albumName, long artistId, String artistName, @Nullable String albumArtistName) {
+        this.albumArtistName = albumArtistName;
         this.id = id;
         this.title = title;
         this.trackNumber = trackNumber;
@@ -109,6 +119,7 @@ public class Song implements Parcelable {
         dest.writeString(this.albumName);
         dest.writeLong(this.artistId);
         dest.writeString(this.artistName);
+        dest.writeString(this.albumArtistName);
     }
 
     protected Song(Parcel in) {
@@ -123,6 +134,7 @@ public class Song implements Parcelable {
         this.albumName = in.readString();
         this.artistId = in.readLong();
         this.artistName = in.readString();
+        this.albumArtistName = in.readString();
     }
 
     public static final Creator<Song> CREATOR = new Creator<Song>() {

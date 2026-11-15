@@ -1,5 +1,7 @@
 package com.kabouzeid.gramophone.model;
 
+import com.kabouzeid.gramophone.util.LibraryCleanup;
+
 import android.os.Parcel;
 import android.os.Parcelable;
 import androidx.annotation.NonNull;
@@ -34,6 +36,7 @@ public class Album implements Parcelable {
     }
 
     public String getArtistName() {
+        if (LibraryCleanup.isEnabled()) return LibraryCleanup.albumArtist(songs);
         return safeGetFirstSong().artistName;
     }
 

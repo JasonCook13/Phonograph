@@ -62,6 +62,7 @@ public final class PreferenceUtil {
 
     public static final String AUDIO_DUCKING = "audio_ducking";
     public static final String GAPLESS_PLAYBACK = "gapless_playback";
+    public static final String SMART_LIBRARY = "smart_library";
 
     public static final String LAST_ADDED_CUTOFF = "last_added_interval";
 
@@ -217,6 +218,10 @@ public final class PreferenceUtil {
 
     public final boolean coloredAppShortcuts() {
         return mPreferences.getBoolean(COLORED_APP_SHORTCUTS, true);
+    }
+
+    public final boolean smartLibrary() {
+        return mPreferences.getBoolean(SMART_LIBRARY, true);
     }
 
     public final boolean gaplessPlayback() {

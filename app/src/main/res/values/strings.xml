@@ -310,4 +310,6 @@
     <string name="finish_current_music_sleep_timer">Finish last song</string>
     <string name="dialog_ringtone_title">Set ringtone</string>
     <string name="dialog_ringtone_message">Allow phonograph to modify audio settings</string>
+    <string name="pref_title_smart_library">Smart library</string>
+    <string name="pref_summary_smart_library">Merge split albums and duplicate artists (\"feat.\", spelling), tidy titles taken from file names and fill in missing artist/album names from folders. Your files are not changed.</string>
 </resources>

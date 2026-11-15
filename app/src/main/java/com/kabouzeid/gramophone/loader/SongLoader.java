@@ -12,7 +12,10 @@ import com.kabouzeid.gramophone.model.Song;
 import com.kabouzeid.gramophone.provider.BlacklistStore;
 import com.kabouzeid.gramophone.util.PreferenceUtil;
 
+import com.kabouzeid.gramophone.util.LibraryCleanup;
+
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -33,6 +36,14 @@ public class SongLoader {
             AudioColumns.ARTIST_ID,// 9
             AudioColumns.ARTIST,// 10
     };
+    /** "album_artist" exists on all modern devices but was only made public in API 30. */
+    protected static final String ALBUM_ARTIST = "album_artist";
+    protected static final String[] PROJECTION_WITH_ALBUM_ARTIST;
+
+    static {
+        PROJECTION_WITH_ALBUM_ARTIST = Arrays.copyOf(BASE_PROJECTION, BASE_PROJECTION.length + 1);
+        PROJECTION_WITH_ALBUM_ARTIST[BASE_PROJECTION.length] = ALBUM_ARTIST; // 11
+    }
 
     @NonNull
     public static List<Song> getAllSongs(@NonNull Context context) {
@@ -93,8 +104,11 @@ public class SongLoader {
         final String albumName = cursor.getString(8);
         final long artistId = cursor.getLong(9);
         final String artistName = cursor.getString(10);
+        final int albumArtistIndex = cursor.getColumnIndex(ALBUM_ARTIST);
+        final String albumArtistName = albumArtistIndex >= 0 ? cursor.getString(albumArtistIndex) : null;
 
-        return new Song(id, title, trackNumber, year, duration, data, dateModified, albumId, albumName, artistId, artistName);
+        Song song = new Song(id, title, trackNumber, year, duration, data, dateModified, albumId, albumName, artistId, artistName, albumArtistName);
+        return LibraryCleanup.isEnabled() ? LibraryCleanup.clean(song) : song;
     }
 
     @Nullable
@@ -119,9 +133,17 @@ public class SongLoader {
 
         try {
             return context.getContentResolver().query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    BASE_PROJECTION, selection, selectionValues, sortOrder);
+                    PROJECTION_WITH_ALBUM_ARTIST, selection, selectionValues, sortOrder);
         } catch (SecurityException e) {
             return null;
+        } catch (Exception e) {
+            // Very old devices without the album_artist column.
+            try {
+                return context.getContentResolver().query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                        BASE_PROJECTION, selection, selectionValues, sortOrder);
+            } catch (SecurityException e2) {
+                return null;
+            }
         }
     }
 

@@ -300,6 +300,19 @@ public class SettingsActivity extends AbsBaseActivity implements ColorChooserDia
                 });
             }
 
+            final Preference smartLibrary = findPreference("smart_library");
+            if (smartLibrary != null) {
+                smartLibrary.setOnPreferenceChangeListener((preference, newValue) -> {
+                    // Reload all library screens once the new value has been saved.
+                    new android.os.Handler().post(() -> {
+                        if (getActivity() != null) {
+                            getActivity().sendBroadcast(new android.content.Intent(com.kabouzeid.gramophone.service.MusicService.MEDIA_STORE_CHANGED));
+                        }
+                    });
+                    return true;
+                });
+            }
+
             final Preference equalizer = findPreference("equalizer");
             if (!hasEqualizer()) {
                 equalizer.setEnabled(false);

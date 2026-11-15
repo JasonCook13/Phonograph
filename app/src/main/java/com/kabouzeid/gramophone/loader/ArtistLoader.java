@@ -10,7 +10,11 @@ import com.kabouzeid.gramophone.model.Artist;
 import com.kabouzeid.gramophone.model.Song;
 import com.kabouzeid.gramophone.util.PreferenceUtil;
 
+import com.kabouzeid.gramophone.util.LibraryCleanup;
+
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 
 /**
@@ -45,6 +49,22 @@ public class ArtistLoader {
 
     @NonNull
     public static Artist getArtist(@NonNull final Context context, long artistId) {
+        if (LibraryCleanup.isEnabled()) {
+            // Artists may be merged ("X feat. Y" -> "X"): find the one holding this id.
+            Artist fallback = null;
+            for (Artist artist : getAllArtists(context)) {
+                if (artist.getId() == artistId) return artist;
+                if (fallback == null) {
+                    for (Song song : artist.getSongs()) {
+                        if (song.artistId == artistId) {
+                            fallback = artist;
+                            break;
+                        }
+                    }
+                }
+            }
+            return fallback != null ? fallback : new Artist();
+        }
         List<Song> songs = SongLoader.getSongs(SongLoader.makeSongCursor(
                 context,
                 AudioColumns.ARTIST_ID + "=?",
@@ -57,7 +77,19 @@ public class ArtistLoader {
     @NonNull
     public static List<Artist> splitIntoArtists(@Nullable final List<Album> albums) {
         List<Artist> artists = new ArrayList<>();
-        if (albums != null) {
+        if (albums != null && LibraryCleanup.isEnabled()) {
+            Map<String, Artist> byKey = new LinkedHashMap<>();
+            for (Album album : albums) {
+                String key = LibraryCleanup.artistKey(album.getArtistName());
+                Artist artist = byKey.get(key);
+                if (artist == null) {
+                    artist = new Artist();
+                    byKey.put(key, artist);
+                }
+                artist.albums.add(album);
+            }
+            artists.addAll(byKey.values());
+        } else if (albums != null) {
             for (Album album : albums) {
                 getOrCreateArtist(artists, album.getArtistId()).albums.add(album);
             }
