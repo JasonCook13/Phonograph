@@ -35,8 +35,14 @@ public class Album implements Parcelable {
         return safeGetFirstSong().artistId;
     }
 
+    /** Smart library album artist, worked out once per album object. */
+    private transient String smartArtistName;
+
     public String getArtistName() {
-        if (LibraryCleanup.isEnabled()) return LibraryCleanup.albumArtist(songs);
+        if (LibraryCleanup.isEnabled()) {
+            if (smartArtistName == null) smartArtistName = LibraryCleanup.albumArtist(songs);
+            return smartArtistName;
+        }
         return safeGetFirstSong().artistName;
     }
 

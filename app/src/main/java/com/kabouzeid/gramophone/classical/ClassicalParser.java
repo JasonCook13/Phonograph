@@ -136,10 +136,14 @@ public final class ClassicalParser {
         Chronology.Composer composer = null;
         String composerName = null;
 
-        // 1. Composer tag.
+        // 1. Composer tag -- but pop songs carry songwriters there too, so it only counts for a
+        //    known composer, a composer folder, or a title with a classical catalogue number.
         if (!isBlank(composerTag)) {
             composer = chronology == null ? null : chronology.findComposer(composerTag);
-            composerName = composer != null ? composer.name : tidyName(composerTag);
+            if (composer != null) composerName = composer.name;
+            else if (composerFolder(path) != null || Catalogue.looksClassical(title) || Catalogue.looksClassical(album)) {
+                composerName = tidyName(composerTag);
+            }
         }
         // 2. A "LAST, FIRST (dates)" folder above the file.
         if (composerName == null) {
@@ -240,11 +244,13 @@ public final class ClassicalParser {
      */
     public static String composerOf(Chronology chronology, String title, String artist,
                                     String albumArtist, String composerTag, String path) {
-        if (!isBlank(composerTag)) {
-            Chronology.Composer c = chronology == null ? null : chronology.findComposer(composerTag);
-            return c != null ? c.name : tidyName(composerTag);
-        }
         String folder = composerFolder(path);
+        if (!isBlank(composerTag)) {
+            // Songwriter tags on pop songs don't count (see parse()).
+            Chronology.Composer c = chronology == null ? null : chronology.findComposer(composerTag);
+            if (c != null) return c.name;
+            if (folder != null || Catalogue.looksClassical(title)) return tidyName(composerTag);
+        }
         if (folder != null) {
             Chronology.Composer c = chronology == null ? null : chronology.findComposer(folder);
             return c != null ? c.name : tidyName(folderToName(folder));
