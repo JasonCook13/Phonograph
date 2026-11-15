@@ -144,7 +144,6 @@ public final class TagWriter {
             case ALBUM_ARTIST: return FieldKey.ALBUM_ARTIST;
             case TRACK: return FieldKey.TRACK;
             case COMPOSER: return FieldKey.COMPOSER;
-            case DISC: return FieldKey.DISC_NO;
             case YEAR: return FieldKey.YEAR;
             case GENRE: return FieldKey.GENRE;
             case CONDUCTOR: return FieldKey.CONDUCTOR;

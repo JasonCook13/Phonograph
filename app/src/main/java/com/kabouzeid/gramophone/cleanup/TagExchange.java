@@ -38,12 +38,12 @@ import java.util.Map;
  *                           "confidence": "sure" | "check", "why": "optional"}]}]}
  * </pre>
  * Fields: title, artist, album, album_artist, composer, conductor, grouping (work), track,
- * disc, year, genre.
+ * year, genre. (No disc: works are linked by composer, work and movement, not by CD layout.)
  */
 public final class TagExchange {
 
     public static final String[] COLUMNS = {"id", "path", "title", "artist", "album", "album_artist",
-            "composer", "conductor", "grouping", "genre", "year", "track", "disc", "has_artwork", "duration_s"};
+            "composer", "conductor", "grouping", "genre", "year", "track", "has_artwork", "duration_s"};
 
     private TagExchange() {
     }
@@ -55,7 +55,7 @@ public final class TagExchange {
             for (FileTags f : files) {
                 w.println(join(new String[]{
                         String.valueOf(f.id), f.path, f.title, f.artist, f.album, f.albumArtist,
-                        f.composer, f.conductor, f.grouping, f.genre, f.year, f.track, f.disc,
+                        f.composer, f.conductor, f.grouping, f.genre, f.year, f.track,
                         f.hasArtwork ? "1" : "0", String.valueOf(Math.round(f.durationMs / 1000.0))}));
             }
         }
@@ -159,7 +159,6 @@ public final class TagExchange {
             case "grouping":
             case "work": return Change.Field.GROUPING;
             case "track": return Change.Field.TRACK;
-            case "disc": return Change.Field.DISC;
             case "year": return Change.Field.YEAR;
             case "genre": return Change.Field.GENRE;
             default: return null;
@@ -176,7 +175,6 @@ public final class TagExchange {
             case CONDUCTOR: return f.conductor;
             case GROUPING: return f.grouping;
             case TRACK: return f.track;
-            case DISC: return f.disc;
             case YEAR: return f.year;
             case GENRE: return f.genre;
             default: return "";

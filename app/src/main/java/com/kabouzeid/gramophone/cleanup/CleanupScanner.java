@@ -87,7 +87,6 @@ public final class CleanupScanner {
                     get(tag, FieldKey.COMPOSER));
             t.year = get(tag, FieldKey.YEAR);
             t.genre = get(tag, FieldKey.GENRE);
-            t.disc = trackOnly(get(tag, FieldKey.DISC_NO));
             t.conductor = get(tag, FieldKey.CONDUCTOR);
             t.grouping = get(tag, FieldKey.GROUPING);
             t.durationMs = song.duration;

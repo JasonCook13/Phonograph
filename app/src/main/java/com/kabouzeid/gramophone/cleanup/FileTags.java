@@ -11,7 +11,7 @@ public class FileTags {
     public final String track;
     public final String composer;
     // Extra fields for the export / Claude round trip.
-    public String year = "", genre = "", disc = "", conductor = "", grouping = "";
+    public String year = "", genre = "", conductor = "", grouping = "";
     public long durationMs;
     public final boolean hasArtwork;
 
