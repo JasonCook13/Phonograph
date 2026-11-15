@@ -50,6 +50,22 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp"
                     android:text="@string/cleanup_scan" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:lineSpacingMultiplier="1.15"
+                    android:text="@string/cleanup_claude_body"
+                    android:textAppearance="@style/TextAppearance.AppCompat.Body1" />
+
+                <Button
+                    android:id="@+id/cleanup_import"
+                    style="@style/Widget.AppCompat.Button.Borderless.Colored"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/cleanup_import" />
             </LinearLayout>
         </ScrollView>
 

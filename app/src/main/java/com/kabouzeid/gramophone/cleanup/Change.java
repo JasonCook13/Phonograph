@@ -2,7 +2,7 @@ package com.kabouzeid.gramophone.cleanup;
 
 /** One proposed tag change to one file. */
 public class Change {
-    public enum Field {TITLE, ARTIST, ALBUM, ALBUM_ARTIST, TRACK, ARTWORK, COMPOSER}
+    public enum Field {TITLE, ARTIST, ALBUM, ALBUM_ARTIST, TRACK, ARTWORK, COMPOSER, DISC, YEAR, GENRE, CONDUCTOR, GROUPING}
 
     public final FileTags file;
     public final Field field;
@@ -10,6 +10,8 @@ public class Change {
     /** For ARTWORK: path of the image file or audio file to take the picture from. */
     public final String newValue;
     public final Category category;
+    /** Why (for fixes imported from Claude); may be null. */
+    public String note;
 
     public Change(FileTags file, Field field, String oldValue, String newValue, Category category) {
         this.file = file;

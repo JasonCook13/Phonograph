@@ -16,6 +16,8 @@ public class AlbumFix {
     public final List<Change> changes = new ArrayList<>();
     public Status status = Status.PENDING;
     public String message;
+    /** Optional note shown above the changes (fixes imported from Claude). */
+    public String note;
 
     public AlbumFix(String key, String title, String artist, int fileCount) {
         this.key = key;

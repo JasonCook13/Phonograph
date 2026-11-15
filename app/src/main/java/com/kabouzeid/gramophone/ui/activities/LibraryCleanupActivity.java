@@ -39,10 +39,12 @@ import com.kabouzeid.gramophone.cleanup.Change;
 import com.kabouzeid.gramophone.cleanup.CleanupPlanner;
 import com.kabouzeid.gramophone.cleanup.CleanupScanner;
 import com.kabouzeid.gramophone.cleanup.FileTags;
+import com.kabouzeid.gramophone.cleanup.TagExchange;
 import com.kabouzeid.gramophone.cleanup.TagWriter;
 import com.kabouzeid.gramophone.ui.activities.base.AbsBaseActivity;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -59,6 +61,8 @@ import java.util.concurrent.Executors;
  */
 public class LibraryCleanupActivity extends AbsBaseActivity {
     private static final int REQUEST_WRITE_PERMISSION = 4711;
+    private static final int REQUEST_IMPORT = 4712;
+    private static final int MENU_RESCAN = 1, MENU_EXPORT = 2, MENU_IMPORT = 3;
     private static final int MAX_URIS_PER_REQUEST = 500;
 
     /** Survives rotation / leaving the screen; the scan is expensive. */
@@ -75,6 +79,10 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
         final Map<String, AlbumFix.Status> decided = new HashMap<>();
         boolean applying;
         int applyDone, applyTotal;
+        /** Showing fixes imported from Claude instead of the tool's own suggestions. */
+        boolean importMode;
+        List<AlbumFix> imported = new ArrayList<>();
+        final EnumSet<Category> enabledImported = EnumSet.of(Category.CLAUDE_SURE, Category.CLAUDE_CHECK);
         /** Albums waiting for the user to grant write access (Android 11+). */
         final List<AlbumFix> waitingForPermission = new ArrayList<>();
         volatile boolean cancelled;
@@ -130,6 +138,9 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
         tintButton(scan);
         tintButton(fixAll);
         scan.setOnClickListener(v -> startScan());
+        Button importButton = findViewById(R.id.cleanup_import);
+        importButton.setTextColor(accent);
+        importButton.setOnClickListener(v -> pickFixesFile());
         fixAll.setOnClickListener(v -> confirmFixAll());
 
         adapter = new Adapter();
@@ -177,14 +188,21 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        menu.add(0, 1, 0, R.string.cleanup_rescan);
+        menu.add(0, MENU_RESCAN, 0, R.string.cleanup_rescan);
+        menu.add(0, MENU_EXPORT, 1, "Export tags for Claude");
+        menu.add(0, MENU_IMPORT, 2, "Import fixes from Claude");
         return true;
     }
 
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
-        MenuItem rescan = menu.findItem(1);
-        if (rescan != null) rescan.setVisible(session.state == Session.State.RESULTS && !session.applying);
+        boolean idle = !session.applying && session.state != Session.State.SCANNING;
+        MenuItem rescan = menu.findItem(MENU_RESCAN);
+        if (rescan != null) rescan.setVisible(session.state == Session.State.RESULTS && idle);
+        MenuItem export = menu.findItem(MENU_EXPORT);
+        if (export != null) export.setVisible(session.state == Session.State.RESULTS && idle && !session.files.isEmpty());
+        MenuItem imp = menu.findItem(MENU_IMPORT);
+        if (imp != null) imp.setVisible(idle);
         return super.onPrepareOptionsMenu(menu);
     }
 
@@ -194,9 +212,18 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
             onBackPressed();
             return true;
         }
-        if (item.getItemId() == 1) {
+        if (item.getItemId() == MENU_RESCAN) {
             session.decided.clear();
+            session.importMode = false;
             startScan();
+            return true;
+        }
+        if (item.getItemId() == MENU_EXPORT) {
+            exportTags();
+            return true;
+        }
+        if (item.getItemId() == MENU_IMPORT) {
+            pickFixesFile();
             return true;
         }
         return super.onOptionsItemSelected(item);
@@ -212,6 +239,7 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
             return;
         }
         final Session s = session;
+        s.importMode = false;
         s.state = Session.State.SCANNING;
         s.progressDone = 0;
         s.progressTotal = 0;
@@ -247,6 +275,12 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
 
     private void replan() {
         final Session s = session;
+        if (s.importMode) {
+            s.fixes = filterImported(s);
+            restoreDecisions(s);
+            render();
+            return;
+        }
         final EnumSet<Category> enabled = EnumSet.copyOf(s.enabled);
         final android.content.Context app = getApplicationContext();
         EXECUTOR.execute(() -> {
@@ -264,6 +298,92 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
             AlbumFix.Status st = s.decided.get(f.key);
             if (st != null) f.status = st;
         }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Round trip through Claude
+    // ---------------------------------------------------------------------------------------
+
+    /** Writes every scanned song's tags to a CSV and opens the share sheet (Claude, Drive, email...). */
+    private void exportTags() {
+        final android.content.Context app = getApplicationContext();
+        final List<FileTags> files = new ArrayList<>(session.files);
+        Toast.makeText(this, "Preparing " + files.size() + " songs…", Toast.LENGTH_SHORT).show();
+        EXECUTOR.execute(() -> {
+            try {
+                File dir = app.getExternalFilesDir(null);
+                if (dir == null) dir = app.getCacheDir();
+                String stamp = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(new java.util.Date());
+                File out = new File(dir, "phonograph-tags-" + stamp + ".csv");
+                TagExchange.exportCsv(files, out);
+                Uri uri = androidx.core.content.FileProvider.getUriForFile(app, app.getPackageName(), out);
+                main.post(() -> {
+                    if (current == null) return;
+                    android.content.Intent send = new android.content.Intent(android.content.Intent.ACTION_SEND)
+                            .setType("text/csv")
+                            .putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                            .putExtra(android.content.Intent.EXTRA_SUBJECT, out.getName())
+                            .putExtra(android.content.Intent.EXTRA_TEXT, "Tags of " + files.size()
+                                    + " songs from Phonograph. Please send back a phonograph-fixes file.")
+                            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    current.startActivity(android.content.Intent.createChooser(send, "Send tags to Claude"));
+                });
+            } catch (Exception e) {
+                main.post(() -> Toast.makeText(app, "Export failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+
+    private void pickFixesFile() {
+        android.content.Intent pick = new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                .setType("*/*")
+                .putExtra(android.content.Intent.EXTRA_MIME_TYPES, new String[]{"application/json", "text/plain", "application/octet-stream"});
+        try {
+            startActivityForResult(pick, REQUEST_IMPORT);
+        } catch (Exception e) {
+            Toast.makeText(this, "No file picker available", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void importFixes(Uri uri) {
+        final android.content.Context app = getApplicationContext();
+        final Session s = session;
+        EXECUTOR.execute(() -> {
+            try (java.io.InputStream in = app.getContentResolver().openInputStream(uri)) {
+                if (in == null) throw new IOException("Can't open the file");
+                Map<Long, FileTags> known = new HashMap<>();
+                for (FileTags f : s.files) known.put(f.id, f);
+                TagExchange.ParseResult r = TagExchange.parseFixes(in, known);
+                main.post(() -> {
+                    s.imported = r.albums;
+                    s.importMode = true;
+                    s.decided.clear();
+                    s.fixes = filterImported(s);
+                    s.state = Session.State.RESULTS;
+                    refresh();
+                    String msg = "Imported " + r.changes + " changes for " + r.albums.size() + " albums";
+                    if (r.skippedUnknownFile + r.skippedBadField > 0) {
+                        msg += " (" + (r.skippedUnknownFile + r.skippedBadField) + " skipped)";
+                    }
+                    Toast.makeText(app, msg, Toast.LENGTH_LONG).show();
+                });
+            } catch (Exception e) {
+                main.post(() -> Toast.makeText(app, "Couldn't read the fixes file: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+
+    /** Imported albums with only the changes whose confidence level is switched on. */
+    private static List<AlbumFix> filterImported(Session s) {
+        List<AlbumFix> out = new ArrayList<>();
+        for (AlbumFix a : s.imported) {
+            AlbumFix copy = new AlbumFix(a.key, a.title, a.artist, a.fileCount);
+            copy.note = a.note;
+            for (Change c : a.changes) if (s.enabledImported.contains(c.category)) copy.changes.add(c);
+            if (!copy.changes.isEmpty()) out.add(copy);
+        }
+        return out;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -409,6 +529,10 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable android.content.Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_IMPORT) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) importFixes(data.getData());
+            return;
+        }
         if (requestCode != REQUEST_WRITE_PERMISSION) return;
         List<AlbumFix> waiting = new ArrayList<>(session.waitingForPermission);
         session.waitingForPermission.clear();
@@ -527,11 +651,6 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
             for (Category c : Category.values()) {
                 CheckBox box = new CheckBox(parent.getContext());
                 CompoundButtonCompat.setButtonTintList(box, ColorStateList.valueOf(accent));
-                box.setOnCheckedChangeListener((b, checked) -> {
-                    if (session.applying) return;
-                    boolean changed = checked ? session.enabled.add(c) : session.enabled.remove(c);
-                    if (changed) replan();
-                });
                 boxes.put(c, box);
                 root.addView(box);
             }
@@ -549,23 +668,32 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
                 }
             }
             StringBuilder sb = new StringBuilder();
-            sb.append("Read ").append(s.files.size()).append(" songs. ");
-            if (s.fixes.isEmpty()) sb.append("Everything already looks consistent.");
-            else sb.append("Suggested ").append(changes).append(" changes across ").append(s.fixes.size()).append(" albums.");
-            if (s.unreadable > 0) sb.append("\n").append(s.unreadable).append(" files couldn't be read and are left alone.");
-            sb.append("\n\nTry Fix on a few albums, check them in your library, then use Fix all.");
+            if (s.importMode) {
+                sb.append("Fixes from Claude: ").append(changes).append(" changes across ").append(s.fixes.size()).append(" albums.");
+                sb.append(" Changes marked \"check\" are ones Claude wasn't sure about; untick them to leave them out.");
+                sb.append("\n\nTry Fix on a few albums first. Use ⋮ → Scan again to go back to the tool's own suggestions.");
+            } else {
+                sb.append("Read ").append(s.files.size()).append(" songs. ");
+                if (s.fixes.isEmpty()) sb.append("Everything already looks consistent.");
+                else sb.append("Suggested ").append(changes).append(" changes across ").append(s.fixes.size()).append(" albums.");
+                if (s.unreadable > 0) sb.append("\n").append(s.unreadable).append(" files couldn't be read and are left alone.");
+                sb.append("\n\nTry Fix on a few albums, check them in your library, then use Fix all.");
+                sb.append(" For classical identification and other judgment calls, use ⋮ → Export tags for Claude.");
+            }
             summary.setText(sb);
 
+            final EnumSet<Category> enabled = s.importMode ? s.enabledImported : s.enabled;
             for (Category c : Category.values()) {
                 CheckBox box = boxes.get(c);
+                box.setVisibility(c.imported() == s.importMode ? View.VISIBLE : View.GONE);
                 box.setOnCheckedChangeListener(null);
-                box.setChecked(s.enabled.contains(c));
+                box.setChecked(enabled.contains(c));
                 Integer n = counts.get(c);
-                box.setText(c.label + (s.enabled.contains(c) ? "  (" + (n == null ? 0 : n) + ")" : ""));
+                box.setText(c.label + (enabled.contains(c) ? "  (" + (n == null ? 0 : n) + ")" : ""));
                 box.setEnabled(!s.applying);
                 box.setOnCheckedChangeListener((b, checked) -> {
                     if (session.applying) return;
-                    boolean changed = checked ? session.enabled.add(c) : session.enabled.remove(c);
+                    boolean changed = checked ? enabled.add(c) : enabled.remove(c);
                     if (changed) replan();
                 });
             }
@@ -662,14 +790,17 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
         List<String> lines = new ArrayList<>();
         for (List<Change> group : same.values()) {
             Change c = group.get(0);
+            String check = c.category == Category.CLAUDE_CHECK ? " (check)" : "";
+            String why = c.note != null && !c.note.isEmpty() && group.size() == 1 ? " · " + c.note : "";
             if (group.size() > 1) {
                 String who = group.size() == f.fileCount ? "All " + group.size() + " songs" : group.size() + " songs";
-                lines.add("• " + who + ": " + describeValue(c));
+                lines.add("• " + who + ": " + describeValue(c) + check);
             } else {
-                lines.add("• " + songName(c.file) + ": " + describeValue(c));
+                lines.add("• " + songName(c.file) + ": " + describeValue(c) + check + why);
             }
         }
         StringBuilder sb = new StringBuilder();
+        if (f.note != null && !f.note.isEmpty()) sb.append(f.note).append("\n");
         for (int i = 0; i < lines.size() && i < MAX_LINES; i++) {
             if (i > 0) sb.append('\n');
             sb.append(lines.get(i));
@@ -685,7 +816,9 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
             case TRACK:
                 return "track number " + c.newValue;
             default:
-                String field = c.field == Change.Field.ALBUM_ARTIST ? "album artist" : c.field.name().toLowerCase(java.util.Locale.ROOT);
+                String field = c.field == Change.Field.ALBUM_ARTIST ? "album artist"
+                        : c.field == Change.Field.GROUPING ? "work (grouping)"
+                        : c.field.name().toLowerCase(java.util.Locale.ROOT);
                 return c.oldValue.isEmpty()
                         ? field + " → \"" + c.newValue + "\""
                         : field + " \"" + c.oldValue + "\" → \"" + c.newValue + "\"";

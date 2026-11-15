@@ -9,7 +9,14 @@ public enum Category {
     SPELLING("Use one spelling per artist and album"),
     ALBUM_ARTIST("Set album artist so albums stay together"),
     TRACK_NUMBERS("Add missing track numbers from file names"),
-    ARTWORK("Add missing album art from the album's other tracks or folder");
+    ARTWORK("Add missing album art from the album's other tracks or folder"),
+    // Fixes imported from a file Claude prepared (see TagExchange).
+    CLAUDE_SURE("From Claude: confident"),
+    CLAUDE_CHECK("From Claude: worth a check");
+
+    public boolean imported() {
+        return this == CLAUDE_SURE || this == CLAUDE_CHECK;
+    }
 
     public final String label;
 

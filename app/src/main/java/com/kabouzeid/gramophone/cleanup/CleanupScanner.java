@@ -77,7 +77,7 @@ public final class CleanupScanner {
             if (tag == null) {
                 return new FileTags(song.id, song.data, "", "", "", "", "", false);
             }
-            return new FileTags(song.id, song.data,
+            FileTags t = new FileTags(song.id, song.data,
                     get(tag, FieldKey.TITLE),
                     get(tag, FieldKey.ARTIST),
                     get(tag, FieldKey.ALBUM),
@@ -85,6 +85,13 @@ public final class CleanupScanner {
                     trackOnly(get(tag, FieldKey.TRACK)),
                     !tag.getArtworkList().isEmpty(),
                     get(tag, FieldKey.COMPOSER));
+            t.year = get(tag, FieldKey.YEAR);
+            t.genre = get(tag, FieldKey.GENRE);
+            t.disc = trackOnly(get(tag, FieldKey.DISC_NO));
+            t.conductor = get(tag, FieldKey.CONDUCTOR);
+            t.grouping = get(tag, FieldKey.GROUPING);
+            t.durationMs = song.duration;
+            return t;
         } catch (Throwable t) {
             Log.w(TAG, "Can't read tags of " + song.data + ": " + t);
             return null;
