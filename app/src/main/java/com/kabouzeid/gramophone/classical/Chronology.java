@@ -177,9 +177,23 @@ public final class Chronology {
         // "Last, First" -> "First Last"
         int comma = raw.indexOf(',');
         if (comma > 0 && raw.indexOf(',', comma + 1) < 0) {
-            String flipped = raw.substring(comma + 1).trim() + " " + raw.substring(0, comma).trim();
-            Composer c = byAlias.get(norm(flipped));
+            String last = raw.substring(0, comma).trim();
+            String given = raw.substring(comma + 1).trim();
+            Composer c = byAlias.get(norm(given + " " + last));
             if (c != null) return c;
+            // Misspelled given names ("Haydn, Joesph"): same surname, given names within two edits,
+            // so "Bach, Johann Christoph Friedrich" doesn't become Johann Sebastian.
+            String nl = norm(last), ng = norm(given);
+            Composer bySurname = byAlias.get(nl);  // "rachmaninov" -> Rachmaninoff
+            for (Composer k : composers) {
+                String full = norm(k.name);
+                String kGiven;
+                if (full.endsWith(" " + nl)) kGiven = full.substring(0, full.length() - nl.length() - 1);
+                else if (k == bySurname && full.lastIndexOf(' ') > 0) kGiven = full.substring(0, full.lastIndexOf(' '));
+                else continue;
+                // "Joesph" ~ "Joseph"; "Georg" ~ "Georg Philipp"
+                if (editDistance(ng, kGiven) <= 2 || kGiven.startsWith(ng + " ") || ng.startsWith(kGiven + " ")) return k;
+            }
         }
         Composer c = byAlias.get(norm(raw));
         if (c != null) return c;
@@ -190,6 +204,22 @@ public final class Chronology {
             if (n.length() > 3 && initialsMatch(n, full)) return k;
         }
         return null;
+    }
+
+    static int editDistance(String a, String b) {
+        int[] prev = new int[b.length() + 1], cur = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) prev[j] = j;
+        for (int i = 1; i <= a.length(); i++) {
+            cur[0] = i;
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                cur[j] = Math.min(Math.min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+            }
+            int[] t = prev;
+            prev = cur;
+            cur = t;
+        }
+        return prev[b.length()];
     }
 
     private static boolean initialsMatch(String candidate, String full) {
