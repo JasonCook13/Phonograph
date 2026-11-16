@@ -2,7 +2,7 @@
 <resources>
 
     <!--grey 300-->
-    <color name="ic_launcher_background">#8A2338</color>
+    <color name="ic_launcher_background">#7A1E33</color>
 
     <color name="twenty_percent_black_overlay">#34000000</color>
     <color name="fifty_percent_black_overlay">#88000000</color>
