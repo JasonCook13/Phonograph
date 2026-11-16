@@ -59,6 +59,7 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import com.kabouzeid.gramophone.util.NaturalOrderComparator;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -360,8 +361,8 @@ public class FoldersFragment extends AbsMainActivityFragment implements MainActi
         } else if (!lhs.isDirectory() && rhs.isDirectory()) {
             return 1;
         } else {
-            return lhs.getName().compareToIgnoreCase
-                    (rhs.getName());
+            // natural order: "Op. 18" before "Op. 130", "2 Allegro" before "10 Finale"
+            return NaturalOrderComparator.INSTANCE.compare(lhs.getName(), rhs.getName());
         }
     };
 
