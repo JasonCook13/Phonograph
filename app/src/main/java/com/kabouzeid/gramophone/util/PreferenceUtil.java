@@ -522,7 +522,22 @@ public final class PreferenceUtil {
             }.getType();
 
             try {
-                return gson.fromJson(data, collectionType);
+                List<CategoryInfo> saved = gson.fromJson(data, collectionType);
+                // Add tabs introduced after the order was saved (e.g. Composers), right after Genres.
+                List<CategoryInfo> out = new ArrayList<>();
+                for (CategoryInfo info : saved) if (info != null && info.category != null) out.add(info);
+                for (CategoryInfo.Category category : CategoryInfo.Category.values()) {
+                    boolean present = false;
+                    for (CategoryInfo info : out) if (info.category == category) present = true;
+                    if (!present) {
+                        int at = out.size();
+                        for (int i = 0; i < out.size(); i++) {
+                            if (out.get(i).category == CategoryInfo.Category.GENRES) at = i + 1;
+                        }
+                        out.add(at, new CategoryInfo(category, true));
+                    }
+                }
+                return out;
             } catch (JsonSyntaxException e) {
                 e.printStackTrace();
             }
@@ -537,6 +552,7 @@ public final class PreferenceUtil {
         defaultCategoryInfos.add(new CategoryInfo(CategoryInfo.Category.ALBUMS, true));
         defaultCategoryInfos.add(new CategoryInfo(CategoryInfo.Category.ARTISTS, true));
         defaultCategoryInfos.add(new CategoryInfo(CategoryInfo.Category.GENRES, true));
+        defaultCategoryInfos.add(new CategoryInfo(CategoryInfo.Category.COMPOSERS, true));
         defaultCategoryInfos.add(new CategoryInfo(CategoryInfo.Category.PLAYLISTS, true));
         return defaultCategoryInfos;
     }

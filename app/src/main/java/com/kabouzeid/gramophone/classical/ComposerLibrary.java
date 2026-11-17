@@ -154,7 +154,8 @@ public final class ComposerLibrary {
             Work work = works.get(workKey);
             if (work == null) {
                 String cat = info.catalogueKeys.isEmpty() ? "" : displayCatalogue(info.catalogueKeys.get(0));
-                work = new Work(prettyWorkTitle(workTitle, info.work), info.category, info.chrono, cat);
+                String folderType = folderCategory(s.data);
+                work = new Work(prettyWorkTitle(workTitle, info.work), folderType != null ? folderType : info.category, info.chrono, cat);
                 works.put(workKey, work);
                 composer.works.add(work);
             }
@@ -229,6 +230,79 @@ public final class ComposerLibrary {
                 };
         }
         Collections.sort(works, cmp);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Type of work from the library folders: Classical/<Composer>/<Group>/<Type>/...
+    // ---------------------------------------------------------------------------------------
+
+    /** Groups and their types in display order (the tabs on a composer's page follow this). */
+    private static final String[][] TYPES = {
+            {"Orchestral", "Symphonies", "Overtures", "Tone Poems", "Orchestral Suites", "Serenades & Divertimenti",
+                    "Orchestral Works", "Dances", "Waltzes", "Polkas", "Galops", "Quadrilles", "Marches"},
+            {"Concertos", "Piano Concertos", "Keyboard Concertos", "Violin Concertos", "Cello Concertos", "Cello Concerti",
+                    "Viola d'Amore Concertos", "Wind & Other Concertos", "Multiple Concertos", "Brandenburg Concertos",
+                    "Concerti Grossi", "Concertante Works", "Concertos"},
+            {"Chamber & Instrumental", "String Quartets", "Quartets", "Piano Quartets", "String Quintets", "Piano Quintets",
+                    "Quintets", "Sextets, Septets & Octets", "Piano Trios", "String Trios", "Trios", "Trio Sonatas",
+                    "Violin Sonatas", "Cello Sonatas", "Sonatas", "Other Sonatas", "Solo Violin Sonatas & Partitas",
+                    "Cello Suites", "Suites", "Partitas", "Musical Offering & Art of Fugue", "Chamber Works"},
+            {"Piano & Keyboard", "Piano Sonatas", "Variations", "Preludes & Fugues", "Well-Tempered Clavier", "Preludes",
+                    "Études", "Nocturnes", "Ballades", "Scherzos", "Impromptus", "Waltzes", "Mazurkas", "Polonaises",
+                    "Rhapsodies", "Dances", "Marches", "Galops", "Polkas", "Rags", "Rags & two-steps", "French Suites",
+                    "Keyboard Suites", "Partitas", "Inventions & Sinfonias", "Paraphrases & Transcriptions",
+                    "Paraphrases & fantasies", "Piano Works", "Keyboard Works", "Keyboard & Organ", "Organ Works"},
+            {"Vocal & Choral", "Masses", "Masses & Requiems", "Requiems", "Passions", "Oratorios", "Cantatas",
+                    "Choral & Sacred Works", "Choral and sacred", "Arias", "Songs", "Vocal Ensembles", "Canons", "Variations"},
+            {"Stage Works", "Operas", "Ballets", "Incidental Music"},
+            {"Other Works"},
+            {"Albums & Film", "Film Scores", "Film and incidental music", "Albums", "Albums (concert works)",
+                    "Studio albums", "Collaborations", "Band"},
+    };
+
+    /** The type-of-work folder a track sits in ("String Quartets"), its group ("Concertos") if the
+     *  next folder is a performer or work, or null when the file is not in that layout. */
+    static String folderCategory(String path) {
+        if (path == null) return null;
+        String[] seg = path.replace('\\', '/').split("/");
+        for (int i = 0; i + 3 < seg.length; i++) {
+            if (!seg[i].equalsIgnoreCase("Classical")) continue;
+            String group = seg[i + 2];
+            for (String[] g : TYPES) {
+                if (!g[0].equalsIgnoreCase(group)) continue;
+                // seg[i + 3] is a folder only if something follows it
+                if (i + 4 < seg.length) {
+                    for (int t = 1; t < g.length; t++) if (g[t].equalsIgnoreCase(seg[i + 3])) return g[t];
+                }
+                return g[0];
+            }
+            return null;
+        }
+        return null;
+    }
+
+    /** Position of a category in the display order; unknown categories go last. */
+    public static int categoryRank(String category) {
+        int rank = 0;
+        for (String[] g : TYPES) {
+            for (int t = 1; t < g.length; t++, rank++) if (g[t].equalsIgnoreCase(category)) return rank;
+            if (g[0].equalsIgnoreCase(category)) return rank;  // the group itself, after its types
+            rank++;
+        }
+        return 10000;
+    }
+
+    /** Groups works by type of work in display order, keeping each group in the given order. */
+    public static LinkedHashMap<String, List<Work>> byType(List<Work> works) {
+        LinkedHashMap<String, List<Work>> m = byCategory(works);
+        List<String> keys = new ArrayList<>(m.keySet());
+        Collections.sort(keys, (a, b) -> {
+            int c = categoryRank(a) - categoryRank(b);
+            return c != 0 ? c : String.valueOf(a).compareToIgnoreCase(String.valueOf(b));
+        });
+        LinkedHashMap<String, List<Work>> out = new LinkedHashMap<>();
+        for (String k : keys) out.put(k, m.get(k));
+        return out;
     }
 
     /** Groups works by category, keeping each group in the given order; groups in order of first work. */

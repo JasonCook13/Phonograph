@@ -12,6 +12,7 @@ import android.view.ViewGroup;
 import com.kabouzeid.gramophone.model.CategoryInfo;
 import com.kabouzeid.gramophone.ui.fragments.mainactivity.library.pager.AlbumsFragment;
 import com.kabouzeid.gramophone.ui.fragments.mainactivity.library.pager.ArtistsFragment;
+import com.kabouzeid.gramophone.ui.fragments.mainactivity.library.pager.ComposersFragment;
 import com.kabouzeid.gramophone.ui.fragments.mainactivity.library.pager.GenresFragment;
 import com.kabouzeid.gramophone.ui.fragments.mainactivity.library.pager.PlaylistsFragment;
 import com.kabouzeid.gramophone.ui.fragments.mainactivity.library.pager.SongsFragment;
@@ -151,6 +152,7 @@ public class MusicLibraryPagerAdapter extends FragmentPagerAdapter {
         ALBUMS(AlbumsFragment.class),
         ARTISTS(ArtistsFragment.class),
         GENRES(GenresFragment.class),
+        COMPOSERS(ComposersFragment.class),
         PLAYLISTS(PlaylistsFragment.class);
 
         private final Class<? extends Fragment> mFragmentClass;

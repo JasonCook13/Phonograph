@@ -323,6 +323,7 @@
     <string name="cleanup_undo_skip">Include</string>
     <string name="cleanup_fix_all">Fix all</string>
     <string name="composers">Composers</string>
+    <string name="no_composers">No classical music found.</string>
     <string name="cleanup_import">Import fixes from Claude</string>
     <string name="cleanup_claude_body">Got a fixes file from Claude? After a scan, use ⋮ → Export tags for Claude to send it your tags; it sends back a file of suggested fixes (classical works, performers, judgment calls). Open that file here to review it the same way.</string>
 </resources>

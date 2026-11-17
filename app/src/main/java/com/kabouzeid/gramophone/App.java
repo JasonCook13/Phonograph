@@ -22,12 +22,8 @@ public class App extends Application {
         app = this;
 
         // default theme
-        if (!ThemeStore.isConfigured(this, 1)) {
-            ThemeStore.editTheme(this)
-                    .primaryColorRes(R.color.md_indigo_500)
-                    .accentColorRes(R.color.md_pink_A400)
-                    .commit();
-        }
+        // default theme: the icon's burgundy and gold
+        com.kabouzeid.gramophone.util.BrandColors.applyDefaultTheme(this);
 
         // Load the composer chronologies in the background (used by Smart library and Composers).
         new Thread(() -> com.kabouzeid.gramophone.classical.ChronologyLoader.get(this), "ChronologyLoader").start();
