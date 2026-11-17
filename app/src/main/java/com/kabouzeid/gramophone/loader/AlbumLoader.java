@@ -5,7 +5,9 @@ import android.provider.MediaStore.Audio.AudioColumns;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.kabouzeid.gramophone.helper.SortOrder;
 import com.kabouzeid.gramophone.model.Album;
+import com.kabouzeid.gramophone.model.Genre;
 import com.kabouzeid.gramophone.model.Song;
 import com.kabouzeid.gramophone.util.PreferenceUtil;
 
@@ -13,6 +15,7 @@ import com.kabouzeid.gramophone.util.LibraryCleanup;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +37,44 @@ public class AlbumLoader {
                 null,
                 getSongLoaderSortOrder(context))
         );
-        return splitIntoAlbums(songs);
+        List<Album> albums = splitIntoAlbums(songs);
+        if (SortOrder.AlbumSortOrder.ALBUM_GENRE.equals(PreferenceUtil.getInstance(context).getAlbumSortOrder())) {
+            sortByGenre(context, albums);
+        }
+        return albums;
+    }
+
+    /** Groups albums by their main genre (A-Z, albums without a genre last), keeping A-Z order inside each genre. */
+    public static void sortByGenre(@NonNull final Context context, @NonNull final List<Album> albums) {
+        final Map<Long, String> genreOfSong = new HashMap<>();
+        for (Genre genre : GenreLoader.getAllGenres(context)) {
+            if (genre.name == null || genre.name.trim().isEmpty()) continue;
+            for (Song song : GenreLoader.getSongs(context, genre.id)) {
+                genreOfSong.put(song.id, genre.name.trim());
+            }
+        }
+        for (Album album : albums) {
+            Map<String, Integer> counts = new HashMap<>();
+            String best = null;
+            int bestCount = 0;
+            for (Song song : album.songs) {
+                String g = genreOfSong.get(song.id);
+                if (g == null) continue;
+                Integer c = counts.get(g);
+                c = c == null ? 1 : c + 1;
+                counts.put(g, c);
+                if (c > bestCount) {
+                    bestCount = c;
+                    best = g;
+                }
+            }
+            album.genre = best;
+        }
+        Collections.sort(albums, (a, b) -> {
+            if (a.genre == null) return b.genre == null ? 0 : 1;
+            if (b.genre == null) return -1;
+            return a.genre.compareToIgnoreCase(b.genre);
+        });
     }
 
     @NonNull

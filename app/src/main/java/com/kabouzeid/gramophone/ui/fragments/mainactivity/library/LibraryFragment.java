@@ -352,6 +352,8 @@ public class LibraryFragment extends AbsMainActivityFragment implements CabHolde
                     .setChecked(currentSortOrder.equals(SortOrder.AlbumSortOrder.ALBUM_ARTIST));
             sortOrderMenu.add(0, R.id.action_album_sort_order_year, 3, R.string.sort_order_year)
                     .setChecked(currentSortOrder.equals(SortOrder.AlbumSortOrder.ALBUM_YEAR));
+            sortOrderMenu.add(0, R.id.action_album_sort_order_genre, 4, R.string.sort_order_genre)
+                    .setChecked(currentSortOrder.equals(SortOrder.AlbumSortOrder.ALBUM_GENRE));
         } else if (fragment instanceof ArtistsFragment) {
             sortOrderMenu.add(0, R.id.action_artist_sort_order_asc, 0, R.string.sort_order_a_z)
                     .setChecked(currentSortOrder.equals(SortOrder.ArtistSortOrder.ARTIST_A_Z));
@@ -388,6 +390,9 @@ public class LibraryFragment extends AbsMainActivityFragment implements CabHolde
                     break;
                 case R.id.action_album_sort_order_year:
                     sortOrder = SortOrder.AlbumSortOrder.ALBUM_YEAR;
+                    break;
+                case R.id.action_album_sort_order_genre:
+                    sortOrder = SortOrder.AlbumSortOrder.ALBUM_GENRE;
                     break;
             }
         } else if (fragment instanceof ArtistsFragment) {

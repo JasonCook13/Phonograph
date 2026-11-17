@@ -46,6 +46,9 @@ public class Album implements Parcelable {
         return safeGetFirstSong().artistName;
     }
 
+    /** Main genre (most common among the album's songs); set when albums are sorted by genre. */
+    public transient String genre;
+
     public int getYear() {
         return safeGetFirstSong().year;
     }

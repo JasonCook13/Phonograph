@@ -65,6 +65,10 @@ public final class SortOrder {
 
         /* Album sort order year */
         String ALBUM_YEAR = MediaStore.Audio.Media.YEAR + " DESC";
+
+        /* Album sort order genre: loaded A-Z, then grouped by each album's main genre in AlbumLoader.
+           The trailing " ASC" keeps it valid SQL while telling it apart from ALBUM_A_Z. */
+        String ALBUM_GENRE = ALBUM_A_Z + " ASC";
     }
 
     /**
