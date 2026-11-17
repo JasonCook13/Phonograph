@@ -514,7 +514,17 @@ public final class PreferenceUtil {
         editor.apply();
     }
 
+    private static final String LIBRARY_ORDER_V2 = "library_categories_order_v2";
+
     public List<CategoryInfo> getLibraryCategoryInfos() {
+        if (!mPreferences.getBoolean(LIBRARY_ORDER_V2, false)) {
+            // One-time move to Albums, Composers, Genres, then the rest; the app opens on Albums.
+            mPreferences.edit()
+                    .remove(LIBRARY_CATEGORIES)
+                    .putInt(LAST_PAGE, 0)
+                    .putBoolean(LIBRARY_ORDER_V2, true)
+                    .apply();
+        }
         String data = mPreferences.getString(LIBRARY_CATEGORIES, null);
         if (data != null) {
             Gson gson = new Gson();
@@ -523,7 +533,7 @@ public final class PreferenceUtil {
 
             try {
                 List<CategoryInfo> saved = gson.fromJson(data, collectionType);
-                // Add tabs introduced after the order was saved (e.g. Composers), right after Genres.
+                // Add tabs introduced after the order was saved (e.g. Composers), right after Albums.
                 List<CategoryInfo> out = new ArrayList<>();
                 for (CategoryInfo info : saved) if (info != null && info.category != null) out.add(info);
                 for (CategoryInfo.Category category : CategoryInfo.Category.values()) {
@@ -532,7 +542,7 @@ public final class PreferenceUtil {
                     if (!present) {
                         int at = out.size();
                         for (int i = 0; i < out.size(); i++) {
-                            if (out.get(i).category == CategoryInfo.Category.GENRES) at = i + 1;
+                            if (out.get(i).category == CategoryInfo.Category.ALBUMS) at = i + 1;
                         }
                         out.add(at, new CategoryInfo(category, true));
                     }
@@ -547,12 +557,12 @@ public final class PreferenceUtil {
     }
 
     public List<CategoryInfo> getDefaultLibraryCategoryInfos() {
-        List<CategoryInfo> defaultCategoryInfos = new ArrayList<>(5);
-        defaultCategoryInfos.add(new CategoryInfo(CategoryInfo.Category.SONGS, true));
+        List<CategoryInfo> defaultCategoryInfos = new ArrayList<>(6);
         defaultCategoryInfos.add(new CategoryInfo(CategoryInfo.Category.ALBUMS, true));
-        defaultCategoryInfos.add(new CategoryInfo(CategoryInfo.Category.ARTISTS, true));
-        defaultCategoryInfos.add(new CategoryInfo(CategoryInfo.Category.GENRES, true));
         defaultCategoryInfos.add(new CategoryInfo(CategoryInfo.Category.COMPOSERS, true));
+        defaultCategoryInfos.add(new CategoryInfo(CategoryInfo.Category.GENRES, true));
+        defaultCategoryInfos.add(new CategoryInfo(CategoryInfo.Category.SONGS, true));
+        defaultCategoryInfos.add(new CategoryInfo(CategoryInfo.Category.ARTISTS, true));
         defaultCategoryInfos.add(new CategoryInfo(CategoryInfo.Category.PLAYLISTS, true));
         return defaultCategoryInfos;
     }

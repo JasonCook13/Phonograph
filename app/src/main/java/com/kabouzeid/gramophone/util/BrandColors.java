@@ -36,6 +36,12 @@ public final class BrandColors {
 
     /** Applies burgundy and gold once (theme version 2), replacing the old indigo and pink defaults. */
     public static void applyDefaultTheme(@NonNull Context context) {
+        android.content.SharedPreferences prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(context);
+        if (!prefs.getBoolean("brand_cream_default_v1", false)) {
+            // Cream (the light theme) as the default look, once; can be changed in Settings.
+            PreferenceUtil.getInstance(context).setGeneralTheme("light");
+            prefs.edit().putBoolean("brand_cream_default_v1", true).apply();
+        }
         if (!ThemeStore.isConfigured(context, 2)) {
             ThemeStore.editTheme(context)
                     .primaryColor(BURGUNDY)

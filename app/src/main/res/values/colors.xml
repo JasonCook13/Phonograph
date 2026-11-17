@@ -3,6 +3,15 @@
 
     <!--grey 300-->
     <color name="ic_launcher_background">#7A1E33</color>
+    <color name="brand_burgundy">#7A1E33</color>
+    <color name="brand_gold">#D6AC52</color>
+    <color name="brand_cream">#F2ECE0</color>
+    <color name="brand_cream_card">#F8F4EC</color>
+    <color name="brand_cream_footer">#E2D9C8</color>
+    <color name="brand_cream_divider">#1F3A2A1D</color>
+    <color name="brand_charcoal">#1E1B1C</color>
+    <color name="brand_charcoal_card">#2A2627</color>
+    <color name="brand_charcoal_footer">#151213</color>
 
     <color name="twenty_percent_black_overlay">#34000000</color>
     <color name="fifty_percent_black_overlay">#88000000</color>

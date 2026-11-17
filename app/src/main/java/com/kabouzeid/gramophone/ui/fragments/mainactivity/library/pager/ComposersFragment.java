@@ -145,8 +145,10 @@ public class ComposersFragment extends AbsLibraryPagerRecyclerViewFragment<Compo
             public void onClick(View v) {
                 int pos = getAdapterPosition();
                 if (pos < 0) return;
-                activity.startActivity(new Intent(activity, ComposersActivity.class)
-                        .putExtra(ComposersActivity.EXTRA_COMPOSER, dataSet.get(pos).name));
+                Intent intent = new Intent(activity, ComposersActivity.class)
+                        .putExtra(ComposersActivity.EXTRA_COMPOSER, dataSet.get(pos).name);
+                if (title != null) ComposersActivity.open(activity, title, intent);
+                else activity.startActivity(intent);
             }
         }
     }

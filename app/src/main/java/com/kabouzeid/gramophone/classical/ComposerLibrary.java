@@ -45,12 +45,15 @@ public final class ComposerLibrary {
     public static final class Work {
         public final String title;
         public final String category;
+        /** Folder group: "Orchestral", "Chamber & Instrumental", ... */
+        public final String group;
         public final Chronology.Work chrono;  // may be null
         public final List<Recording> recordings = new ArrayList<>();
         final String catalogueSort;
 
-        Work(String title, String category, Chronology.Work chrono, String catalogueSort) {
+        Work(String title, String group, String category, Chronology.Work chrono, String catalogueSort) {
             this.title = title;
+            this.group = group;
             this.category = category;
             this.chrono = chrono;
             this.catalogueSort = catalogueSort;
@@ -154,8 +157,10 @@ public final class ComposerLibrary {
             Work work = works.get(workKey);
             if (work == null) {
                 String cat = info.catalogueKeys.isEmpty() ? "" : displayCatalogue(info.catalogueKeys.get(0));
-                String folderType = folderCategory(s.data);
-                work = new Work(prettyWorkTitle(workTitle, info.work), folderType != null ? folderType : info.category, info.chrono, cat);
+                String[] where = folderLocation(s.data);
+                String category = where != null ? where[1] : info.category;
+                String group = where != null ? where[0] : groupOf(info.category);
+                work = new Work(prettyWorkTitle(workTitle, info.work), group, category, info.chrono, cat);
                 works.put(workKey, work);
                 composer.works.add(work);
             }
@@ -260,9 +265,9 @@ public final class ComposerLibrary {
                     "Studio albums", "Collaborations", "Band"},
     };
 
-    /** The type-of-work folder a track sits in ("String Quartets"), its group ("Concertos") if the
-     *  next folder is a performer or work, or null when the file is not in that layout. */
-    static String folderCategory(String path) {
+    /** {group, type} from the folders: Classical/<Composer>/<Group>/<Type>/... The type is the group
+     *  itself when the next folder is a performer or a work. Null when the file is not in that layout. */
+    static String[] folderLocation(String path) {
         if (path == null) return null;
         String[] seg = path.replace('\\', '/').split("/");
         for (int i = 0; i + 3 < seg.length; i++) {
@@ -272,37 +277,88 @@ public final class ComposerLibrary {
                 if (!g[0].equalsIgnoreCase(group)) continue;
                 // seg[i + 3] is a folder only if something follows it
                 if (i + 4 < seg.length) {
-                    for (int t = 1; t < g.length; t++) if (g[t].equalsIgnoreCase(seg[i + 3])) return g[t];
+                    for (int t = 1; t < g.length; t++) if (g[t].equalsIgnoreCase(seg[i + 3])) return new String[]{g[0], g[t]};
                 }
-                return g[0];
+                return new String[]{g[0], g[0]};
             }
             return null;
         }
         return null;
     }
 
-    /** Position of a category in the display order; unknown categories go last. */
-    public static int categoryRank(String category) {
-        int rank = 0;
-        for (String[] g : TYPES) {
-            for (int t = 1; t < g.length; t++, rank++) if (g[t].equalsIgnoreCase(category)) return rank;
-            if (g[0].equalsIgnoreCase(category)) return rank;  // the group itself, after its types
-            rank++;
+    /** The group a type of work belongs to (first match), or "Other Works". */
+    static String groupOf(String category) {
+        if (category != null) {
+            for (String[] g : TYPES) {
+                for (String t : g) if (t.equalsIgnoreCase(category)) return g[0];
+            }
         }
-        return 10000;
+        return "Other Works";
     }
 
-    /** Groups works by type of work in display order, keeping each group in the given order. */
-    public static LinkedHashMap<String, List<Work>> byType(List<Work> works) {
-        LinkedHashMap<String, List<Work>> m = byCategory(works);
-        List<String> keys = new ArrayList<>(m.keySet());
-        Collections.sort(keys, (a, b) -> {
-            int c = categoryRank(a) - categoryRank(b);
-            return c != 0 ? c : String.valueOf(a).compareToIgnoreCase(String.valueOf(b));
-        });
-        LinkedHashMap<String, List<Work>> out = new LinkedHashMap<>();
-        for (String k : keys) out.put(k, m.get(k));
+    /** Groups in display order. */
+    public static List<String> groupOrder() {
+        List<String> out = new ArrayList<>();
+        for (String[] g : TYPES) out.add(g[0]);
         return out;
+    }
+
+    /** Short tab label for a group. */
+    public static String groupLabel(String group) {
+        switch (group) {
+            case "Chamber & Instrumental": return "Chamber";
+            case "Piano & Keyboard": return "Piano";
+            case "Vocal & Choral": return "Vocal";
+            case "Stage Works": return "Stage";
+            case "Other Works": return "Other";
+            default: return group;
+        }
+    }
+
+    /** Position of a type inside its group; the group itself (loose works) and unknown types go last. */
+    public static int categoryRank(String group, String category) {
+        for (String[] g : TYPES) {
+            if (!g[0].equalsIgnoreCase(group)) continue;
+            for (int t = 1; t < g.length; t++) if (g[t].equalsIgnoreCase(category)) return t;
+            return g[0].equalsIgnoreCase(category) ? 1000 : 500;
+        }
+        return 500;
+    }
+
+    /** Works by group (display order), then by type inside each group (display order). */
+    public static LinkedHashMap<String, LinkedHashMap<String, List<Work>>> byGroup(List<Work> works) {
+        LinkedHashMap<String, LinkedHashMap<String, List<Work>>> out = new LinkedHashMap<>();
+        List<String> groups = groupOrder();
+        for (String g : groups) out.put(g, new LinkedHashMap<>());
+        for (Work w : works) {
+            String g = w.group == null ? "Other Works" : w.group;
+            LinkedHashMap<String, List<Work>> types = out.get(g);
+            if (types == null) {
+                types = new LinkedHashMap<>();
+                out.put(g, types);
+            }
+            String c = w.category == null || w.category.isEmpty() ? g : w.category;
+            List<Work> l = types.get(c);
+            if (l == null) {
+                l = new ArrayList<>();
+                types.put(c, l);
+            }
+            l.add(w);
+        }
+        LinkedHashMap<String, LinkedHashMap<String, List<Work>>> sorted = new LinkedHashMap<>();
+        for (Map.Entry<String, LinkedHashMap<String, List<Work>>> e : out.entrySet()) {
+            if (e.getValue().isEmpty()) continue;
+            final String g = e.getKey();
+            List<String> keys = new ArrayList<>(e.getValue().keySet());
+            Collections.sort(keys, (a, b) -> {
+                int c = categoryRank(g, a) - categoryRank(g, b);
+                return c != 0 ? c : a.compareToIgnoreCase(b);
+            });
+            LinkedHashMap<String, List<Work>> types = new LinkedHashMap<>();
+            for (String k : keys) types.put(k, e.getValue().get(k));
+            sorted.put(g, types);
+        }
+        return sorted;
     }
 
     /** Groups works by category, keeping each group in the given order; groups in order of first work. */
