@@ -52,8 +52,15 @@ public final class CleanupScanner {
 
     @NonNull
     public static Result scan(@NonNull Context context, @NonNull Progress progress) {
+        return scan(context, progress, 0);
+    }
+
+    /** Only songs Android added after {@code sinceSeconds} (0 = the whole library). */
+    @NonNull
+    public static Result scan(@NonNull Context context, @NonNull Progress progress, long sinceSeconds) {
         quietLogging();
         List<Song> songs = SongLoader.getAllSongsRaw(context);
+        if (sinceSeconds > 0) songs = addedSince(context, songs, sinceSeconds);
         List<FileTags> files = new ArrayList<>(songs.size());
         int unreadable = 0;
         for (int i = 0; i < songs.size(); i++) {
@@ -65,6 +72,23 @@ public final class CleanupScanner {
         }
         progress.onProgress(songs.size(), songs.size());
         return new Result(files, unreadable);
+    }
+
+    private static List<Song> addedSince(Context context, List<Song> songs, long sinceSeconds) {
+        java.util.Set<Long> recent = new java.util.HashSet<>();
+        try (android.database.Cursor c = context.getContentResolver().query(
+                android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                new String[]{android.provider.MediaStore.Audio.Media._ID},
+                android.provider.MediaStore.Audio.Media.DATE_ADDED + " > ?",
+                new String[]{String.valueOf(sinceSeconds)}, null)) {
+            if (c != null) while (c.moveToNext()) recent.add(c.getLong(0));
+        } catch (Throwable t) {
+            Log.w(TAG, "Can't read date added: " + t);
+            return songs;
+        }
+        List<Song> out = new ArrayList<>();
+        for (Song s : songs) if (recent.contains(s.id)) out.add(s);
+        return out;
     }
 
     private static FileTags read(Song song) {

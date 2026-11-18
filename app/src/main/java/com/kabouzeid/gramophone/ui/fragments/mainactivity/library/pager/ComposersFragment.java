@@ -31,6 +31,17 @@ public class ComposersFragment extends AbsLibraryPagerRecyclerViewFragment<Compo
         implements LoaderManager.LoaderCallbacks<List<ComposerLibrary.Composer>> {
 
     private static final int LOADER_ID = LoaderIds.COMPOSERS_FRAGMENT;
+    public static final int SORT_NAME = 0, SORT_WORKS = 1, SORT_PLAYS = 2;
+    private static final String PREF_SORT = "composer_list_sort";
+
+    public int getSort() {
+        return android.preference.PreferenceManager.getDefaultSharedPreferences(requireContext()).getInt(PREF_SORT, SORT_NAME);
+    }
+
+    public void setSort(int sort) {
+        android.preference.PreferenceManager.getDefaultSharedPreferences(requireContext()).edit().putInt(PREF_SORT, sort).apply();
+        getLoaderManager().restartLoader(LOADER_ID, null, this);
+    }
 
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
@@ -65,11 +76,12 @@ public class ComposersFragment extends AbsLibraryPagerRecyclerViewFragment<Compo
     @NonNull
     @Override
     public Loader<List<ComposerLibrary.Composer>> onCreateLoader(int id, Bundle args) {
-        return new AsyncComposerLoader(getActivity());
+        return new AsyncComposerLoader(getActivity(), getSort());
     }
 
     @Override
     public void onLoadFinished(@NonNull Loader<List<ComposerLibrary.Composer>> loader, List<ComposerLibrary.Composer> data) {
+        getAdapter().byName = getSort() == SORT_NAME;
         getAdapter().swapDataSet(data);
     }
 
@@ -79,19 +91,41 @@ public class ComposersFragment extends AbsLibraryPagerRecyclerViewFragment<Compo
     }
 
     private static class AsyncComposerLoader extends WrappedAsyncTaskLoader<List<ComposerLibrary.Composer>> {
-        AsyncComposerLoader(Context context) {
+        private final int sort;
+
+        AsyncComposerLoader(Context context, int sort) {
             super(context);
+            this.sort = sort;
         }
 
         @Override
         public List<ComposerLibrary.Composer> loadInBackground() {
-            return new ArrayList<>(ComposerLibrary.get(getContext(), false).composers);
+            List<ComposerLibrary.Composer> list = new ArrayList<>(ComposerLibrary.get(getContext(), false).composers);
+            if (sort == SORT_WORKS) {
+                java.util.Collections.sort(list, (a, b) -> b.works.size() - a.works.size());
+            } else if (sort == SORT_PLAYS) {
+                final java.util.Map<Long, Float> scores = com.kabouzeid.gramophone.provider.SongPlayCountStore.getInstance(getContext()).getPlayScores();
+                final java.util.Map<ComposerLibrary.Composer, Float> total = new java.util.HashMap<>();
+                for (ComposerLibrary.Composer c : list) {
+                    float t = 0;
+                    for (ComposerLibrary.Work w : c.works)
+                        for (ComposerLibrary.Recording r : w.recordings)
+                            for (com.kabouzeid.gramophone.model.Song s : r.tracks) {
+                                Float f = scores.get(s.id);
+                                if (f != null) t += f;
+                            }
+                    total.put(c, t);
+                }
+                java.util.Collections.sort(list, (a, b) -> Float.compare(total.get(b), total.get(a)));
+            }
+            return list;
         }
     }
 
     public static class ComposerAdapter extends RecyclerView.Adapter<ComposerAdapter.ViewHolder> implements FastScrollRecyclerView.SectionedAdapter {
         private final AppCompatActivity activity;
         List<ComposerLibrary.Composer> dataSet;
+        boolean byName = true;
 
         ComposerAdapter(AppCompatActivity activity, List<ComposerLibrary.Composer> dataSet) {
             this.activity = activity;
@@ -133,7 +167,7 @@ public class ComposersFragment extends AbsLibraryPagerRecyclerViewFragment<Compo
         @NonNull
         @Override
         public String getSectionName(int position) {
-            return MusicUtil.getSectionName(dataSet.get(position).sortName());
+            return byName ? MusicUtil.getSectionName(dataSet.get(position).sortName()) : "";
         }
 
         class ViewHolder extends MediaEntryViewHolder {

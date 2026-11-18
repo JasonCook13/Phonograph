@@ -33,7 +33,16 @@ public class AlbumsFragment extends AbsLibraryPagerRecyclerViewCustomGridSizeFra
 
     @Override
     protected GridLayoutManager createLayoutManager() {
-        return new GridLayoutManager(getActivity(), getGridSize());
+        final GridLayoutManager lm = new GridLayoutManager(getActivity(), getGridSize());
+        // Genre names (when sorted by genre) take a whole row, so each genre starts on a new line.
+        lm.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+            @Override
+            public int getSpanSize(int position) {
+                AlbumAdapter a = getAdapter();
+                return a != null && a.isHeader(position) ? lm.getSpanCount() : 1;
+            }
+        });
+        return lm;
     }
 
     @NonNull

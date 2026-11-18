@@ -50,10 +50,23 @@ public final class CleanupPlanner {
     private CleanupPlanner() {
     }
 
+    /** The folder right under "Music" ("Jazz" in .../Music/Jazz/Artist/Album/01.mp3), if the file is deeper. */
+    static String genreFolder(String path) {
+        if (path == null) return null;
+        String[] seg = path.replace('\\', '/').split("/");
+        for (int i = 0; i + 2 < seg.length; i++) {
+            if (seg[i].equalsIgnoreCase("Music")) {
+                String g = seg[i + 1].trim();
+                return g.isEmpty() || g.startsWith(".") ? null : g;
+            }
+        }
+        return null;
+    }
+
     /** Mutable working copy of one file's tags while the rules run. */
     private static final class Work {
         final FileTags orig;
-        String title, artist, album, albumArtist, track, composer;
+        String title, artist, album, albumArtist, track, composer, genre;
         /** Composer display name if this is classical music, else null. */
         String classicalComposer;
         final List<Change> changes = new ArrayList<>();
@@ -66,6 +79,7 @@ public final class CleanupPlanner {
             albumArtist = f.albumArtist;
             track = f.track;
             composer = f.composer;
+            genre = f.genre == null ? "" : f.genre;
         }
 
         void set(Change.Field field, String value, Category cat) {
@@ -77,6 +91,7 @@ public final class CleanupPlanner {
                 case ALBUM_ARTIST: old = albumArtist; albumArtist = value; break;
                 case TRACK: old = track; track = value; break;
                 case COMPOSER: old = composer; composer = value; break;
+                case GENRE: old = genre; genre = value; break;
                 default: old = "";
             }
             if (value.equals(old)) return;
@@ -113,6 +128,15 @@ public final class CleanupPlanner {
                 if (w.classicalComposer != null && w.composer.isEmpty()) {
                     w.set(Change.Field.COMPOSER, w.classicalComposer, Category.CLASSICAL);
                 }
+            }
+        }
+
+        // 0b. Genre from the top folder under Music: .../Music/Jazz/Miles Davis/... -> "Jazz".
+        //     The Albums genre sort and the Genres tab both read this tag.
+        if (enabled.contains(Category.GENRE)) {
+            for (Work w : works) {
+                String g = genreFolder(w.orig.path);
+                if (g != null && !g.equalsIgnoreCase(w.genre.trim())) w.set(Change.Field.GENRE, g, Category.GENRE);
             }
         }
 

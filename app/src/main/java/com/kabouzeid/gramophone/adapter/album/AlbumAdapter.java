@@ -49,6 +49,7 @@ public class AlbumAdapter extends AbsMultiSelectAdapter<AlbumAdapter.ViewHolder,
         super(activity, cabHolder, R.menu.menu_media_selection);
         this.activity = activity;
         this.dataSet = dataSet;
+        rebuildRows();
         this.itemLayoutRes = itemLayoutRes;
         this.usePalette = usePalette;
 
@@ -62,6 +63,7 @@ public class AlbumAdapter extends AbsMultiSelectAdapter<AlbumAdapter.ViewHolder,
 
     public void swapDataSet(List<Album> dataSet) {
         this.dataSet = dataSet;
+        rebuildRows();
         notifyDataSetChanged();
     }
 
@@ -69,9 +71,79 @@ public class AlbumAdapter extends AbsMultiSelectAdapter<AlbumAdapter.ViewHolder,
         return dataSet;
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Genre headers: when sorted by genre, each genre starts a new row under a thin line and its name
+    // ---------------------------------------------------------------------------------------
+
+    private static final int VIEW_TYPE_GENRE_HEADER = 0x6E7E;
+    /** Albums and, in genre order, genre names (String) before each genre. */
+    private final List<Object> rows = new ArrayList<>();
+
+    private void rebuildRows() {
+        rows.clear();
+        boolean headers = !(this instanceof HorizontalAlbumAdapter)
+                && SortOrder.AlbumSortOrder.ALBUM_GENRE.equals(PreferenceUtil.getInstance(activity).getAlbumSortOrder());
+        if (headers) {
+            headers = false;
+            for (Album a : dataSet) if (a.genre != null) { headers = true; break; }
+        }
+        String last = null;
+        boolean first = true;
+        for (Album a : dataSet) {
+            if (headers) {
+                String g = a.genre == null ? "Other" : a.genre;
+                if (first || !g.equals(last)) rows.add(g);
+                last = g;
+                first = false;
+            }
+            rows.add(a);
+        }
+    }
+
+    /** True for a genre-name row (spans the whole grid width). */
+    public boolean isHeader(int position) {
+        return position >= 0 && position < rows.size() && rows.get(position) instanceof String;
+    }
+
+    @Nullable
+    protected Album albumAt(int position) {
+        if (position < 0 || position >= rows.size()) return null;
+        Object o = rows.get(position);
+        return o instanceof Album ? (Album) o : null;
+    }
+
+    @Override
+    public int getItemViewType(int position) {
+        return isHeader(position) ? VIEW_TYPE_GENRE_HEADER : super.getItemViewType(position);
+    }
+
+    private ViewHolder createGenreHeader() {
+        android.widget.LinearLayout l = new android.widget.LinearLayout(activity);
+        l.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int dp = Math.round(activity.getResources().getDisplayMetrics().density);
+        l.setPadding(16 * dp, 12 * dp, 16 * dp, 4 * dp);
+        l.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        View line = new View(activity);
+        line.setBackgroundColor(com.kabouzeid.appthemehelper.util.ATHUtil.resolveColor(activity, R.attr.dividerColor));
+        l.addView(line, new android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp)));
+        android.widget.TextView t = new android.widget.TextView(activity);
+        t.setTag("genre");
+        t.setTextAppearance(activity, R.style.TextAppearance_AppCompat_Subhead);
+        t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        t.setTextColor(com.kabouzeid.gramophone.util.BrandColors.goldText(activity));
+        t.setPadding(0, 8 * dp, 0, 4 * dp);
+        l.addView(t);
+        ViewHolder h = new ViewHolder(l);
+        l.setOnClickListener(null);
+        l.setOnLongClickListener(null);
+        l.setClickable(false);
+        return h;
+    }
+
     @Override
     @NonNull
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        if (viewType == VIEW_TYPE_GENRE_HEADER) return createGenreHeader();
         View view = LayoutInflater.from(activity).inflate(itemLayoutRes, parent, false);
         return createViewHolder(view, viewType);
     }
@@ -93,7 +165,11 @@ public class AlbumAdapter extends AbsMultiSelectAdapter<AlbumAdapter.ViewHolder,
 
     @Override
     public void onBindViewHolder(@NonNull final ViewHolder holder, int position) {
-        final Album album = dataSet.get(position);
+        if (isHeader(position)) {
+            ((android.widget.TextView) holder.itemView.findViewWithTag("genre")).setText((String) rows.get(position));
+            return;
+        }
+        final Album album = albumAt(position);
 
         final boolean isChecked = isChecked(album);
         holder.itemView.setActivated(isChecked);
@@ -155,17 +231,18 @@ public class AlbumAdapter extends AbsMultiSelectAdapter<AlbumAdapter.ViewHolder,
 
     @Override
     public int getItemCount() {
-        return dataSet.size();
+        return rows.size();
     }
 
     @Override
     public long getItemId(int position) {
-        return dataSet.get(position).getId();
+        Album a = albumAt(position);
+        return a != null ? a.getId() : -1000L - position;
     }
 
     @Override
     protected Album getIdentifier(int position) {
-        return dataSet.get(position);
+        return albumAt(position);
     }
 
     @Override
@@ -190,19 +267,21 @@ public class AlbumAdapter extends AbsMultiSelectAdapter<AlbumAdapter.ViewHolder,
     @NonNull
     @Override
     public String getSectionName(int position) {
+        if (isHeader(position)) return MusicUtil.getSectionName((String) rows.get(position));
+        if (albumAt(position) == null) return "";
         @Nullable String sectionName = null;
         switch (PreferenceUtil.getInstance(activity).getAlbumSortOrder()) {
             case SortOrder.AlbumSortOrder.ALBUM_A_Z:
             case SortOrder.AlbumSortOrder.ALBUM_Z_A:
-                sectionName = dataSet.get(position).getTitle();
+                sectionName = albumAt(position).getTitle();
                 break;
             case SortOrder.AlbumSortOrder.ALBUM_ARTIST:
-                sectionName = dataSet.get(position).getArtistName();
+                sectionName = albumAt(position).getArtistName();
                 break;
             case SortOrder.AlbumSortOrder.ALBUM_YEAR:
-                return MusicUtil.getYearString(dataSet.get(position).getYear());
+                return MusicUtil.getYearString(albumAt(position).getYear());
             case SortOrder.AlbumSortOrder.ALBUM_GENRE:
-                sectionName = dataSet.get(position).genre;
+                sectionName = albumAt(position).genre;
                 break;
         }
 
@@ -221,6 +300,7 @@ public class AlbumAdapter extends AbsMultiSelectAdapter<AlbumAdapter.ViewHolder,
 
         @Override
         public void onClick(View v) {
+            if (albumAt(getAdapterPosition()) == null) return;
             if (isInQuickSelectMode()) {
                 toggleChecked(getAdapterPosition());
             } else {
@@ -228,12 +308,13 @@ public class AlbumAdapter extends AbsMultiSelectAdapter<AlbumAdapter.ViewHolder,
                         Pair.create(image,
                                 activity.getResources().getString(R.string.transition_album_art)
                         )};
-                NavigationUtil.goToAlbum(activity, dataSet.get(getAdapterPosition()).getId(), albumPairs);
+                NavigationUtil.goToAlbum(activity, albumAt(getAdapterPosition()).getId(), albumPairs);
             }
         }
 
         @Override
         public boolean onLongClick(View view) {
+            if (albumAt(getAdapterPosition()) == null) return false;
             toggleChecked(getAdapterPosition());
             return true;
         }

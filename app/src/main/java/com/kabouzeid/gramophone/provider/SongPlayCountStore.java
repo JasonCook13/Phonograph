@@ -321,6 +321,21 @@ public class SongPlayCountStore extends SQLiteOpenHelper {
         database.endTransaction();
     }
 
+    /** Recent play-count score per song id (songs never played are absent). */
+    @NonNull
+    public java.util.Map<Long, Float> getPlayScores() {
+        updateResults();
+        java.util.Map<Long, Float> out = new java.util.HashMap<>();
+        Cursor c = getReadableDatabase().query(SongPlayCountColumns.NAME,
+                new String[]{SongPlayCountColumns.ID, SongPlayCountColumns.PLAY_COUNT_SCORE},
+                null, null, null, null, null);
+        if (c != null) {
+            while (c.moveToNext()) out.put(c.getLong(0), c.getFloat(1));
+            c.close();
+        }
+        return out;
+    }
+
     /**
      * @param songId The song Id to remove.
      */

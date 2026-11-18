@@ -109,6 +109,93 @@ public final class ComposerLibrary {
 
     public enum Sort {COMPOSITION, CATALOGUE, TITLE}
 
+    // ---------------------------------------------------------------------------------------
+    // One composer, many spellings
+    // ---------------------------------------------------------------------------------------
+
+    /** Groups composer names that refer to the same person and picks one display name for each. */
+    static final class NameMerger {
+        static final class Entry {
+            String key, displayName, surname, given;
+            Chronology.Composer chrono;
+            Entry parent;  // after resolve(): the entry this one was merged into (or itself)
+        }
+
+        private final Map<String, Entry> byRaw = new LinkedHashMap<>();
+
+        private static String rawKey(String name, Chronology.Composer chrono) {
+            return chrono != null ? "#" + chrono.name : "?" + Chronology.norm(clean(name));
+        }
+
+        void add(String name, Chronology.Composer chrono) {
+            String k = rawKey(name, chrono);
+            if (byRaw.containsKey(k)) return;
+            Entry e = new Entry();
+            e.chrono = chrono;
+            e.displayName = chrono != null ? chrono.name : clean(name);
+            // Surname = last word as written, so "Saint-Saëns" stays one surname ("saint saens").
+            String d = e.displayName.trim();
+            int sp = d.lastIndexOf(' ');
+            e.surname = Chronology.norm(sp >= 0 ? d.substring(sp + 1) : d);
+            e.given = sp >= 0 ? Chronology.norm(d.substring(0, sp)) : "";
+            e.key = k;
+            e.parent = e;
+            byRaw.put(k, e);
+        }
+
+        void resolve() {
+            List<Entry> all = new ArrayList<>(byRaw.values());
+            // Known composers and fuller names first, so others merge into them.
+            Collections.sort(all, (a, b) -> {
+                if ((a.chrono != null) != (b.chrono != null)) return a.chrono != null ? -1 : 1;
+                return b.given.length() - a.given.length();
+            });
+            for (int i = 0; i < all.size(); i++) {
+                Entry e = all.get(i);
+                if (e.parent != e || e.chrono != null) continue;
+                for (int j = 0; j < i; j++) {
+                    Entry t = all.get(j);
+                    if (t.parent != t || !t.surname.equals(e.surname)) continue;
+                    if (sameGiven(t.given, e.given)) {
+                        e.parent = t;
+                        break;
+                    }
+                }
+            }
+        }
+
+        Entry of(String name, Chronology.Composer chrono) {
+            Entry e = byRaw.get(rawKey(name, chrono));
+            while (e.parent != e) e = e.parent;
+            return e;
+        }
+
+        /** "" matches anything; "j s" ~ "johann sebastian"; "mily" ~ "mily alexeyevich"; small typos. */
+        static boolean sameGiven(String a, String b) {
+            if (a.isEmpty() || b.isEmpty() || a.equals(b)) return true;
+            if (a.startsWith(b + " ") || b.startsWith(a + " ")) return true;
+            String[] x = a.split(" "), y = b.split(" ");
+            if (x[0].length() == 1 || y[0].length() == 1) {
+                int n = Math.min(x.length, y.length);
+                for (int i = 0; i < n; i++) if (x[i].charAt(0) != y[i].charAt(0)) return false;
+                return true;
+            }
+            return Chronology.editDistance(a, b) <= 2;
+        }
+
+        /** "BALAKIREV, MILY (1837-1910)" -> "Mily Balakirev". */
+        static String clean(String name) {
+            if (name == null) return "";
+            String n = name.replaceAll("\\(.*?\\)|\\[.*?\\]", " ").replaceAll("\\s+", " ").trim();
+            n = n.replaceAll("[,;\\-\\s]+$", "");
+            int comma = n.indexOf(',');
+            if (comma > 0 && n.indexOf(',', comma + 1) < 0) {
+                n = n.substring(comma + 1).trim() + " " + n.substring(0, comma).trim();
+            }
+            return ClassicalParser.tidyName(n.trim());
+        }
+    }
+
     public final List<Composer> composers;
 
     private ComposerLibrary(List<Composer> composers) {
@@ -140,15 +227,29 @@ public final class ComposerLibrary {
         Map<String, Work> works = new HashMap<>();
         Map<String, Recording> recordings = new HashMap<>();
 
+        // Pass 1: parse every song, then merge spellings of the same composer
+        // ("Balakirev (1837-1910)", "Balakirev, Mily", "Mily Balakirev"; "Dvorak" / "Dvořák").
+        List<Song> classicalSongs = new ArrayList<>();
+        List<ClassicalParser.Info> infos = new ArrayList<>();
         for (Song s : songs) {
             ClassicalParser.Info info = ClassicalParser.parse(chronology, s.title, s.albumName, s.artistName,
                     s.albumArtistName, s.composer, s.data);
             if (info == null) continue;
+            classicalSongs.add(s);
+            infos.add(info);
+        }
+        NameMerger names = new NameMerger();
+        for (ClassicalParser.Info info : infos) names.add(info.composerName, info.composer);
+        names.resolve();
 
-            String composerKey = info.composer != null ? "#" + info.composer.name : Chronology.norm(info.composerName);
+        for (int i = 0; i < classicalSongs.size(); i++) {
+            Song s = classicalSongs.get(i);
+            ClassicalParser.Info info = infos.get(i);
+            NameMerger.Entry who = names.of(info.composerName, info.composer);
+            String composerKey = who.key;
             Composer composer = composers.get(composerKey);
             if (composer == null) {
-                composer = new Composer(info.composerName, info.composer);
+                composer = new Composer(who.displayName, who.chrono);
                 composers.put(composerKey, composer);
             }
 

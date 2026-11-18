@@ -10,8 +10,8 @@ import com.kabouzeid.appthemehelper.ThemeStore;
 
 /** The app icon's palette: burgundy, gold and cream. */
 public final class BrandColors {
-    @ColorInt public static final int BURGUNDY = 0xFF7A1E33;
-    @ColorInt public static final int BURGUNDY_DARK = 0xFF5C1626;
+    @ColorInt public static final int BURGUNDY = 0xFF6B1A2D;
+    @ColorInt public static final int BURGUNDY_DARK = 0xFF561524;
     @ColorInt public static final int GOLD = 0xFFD6AC52;
     /** Darker gold that stays readable as text on light backgrounds. */
     @ColorInt public static final int GOLD_DEEP = 0xFF8F6A1F;
@@ -34,15 +34,25 @@ public final class BrandColors {
         return l > 0.5;
     }
 
-    /** Applies burgundy and gold once (theme version 2), replacing the old indigo and pink defaults. */
+    /** Applies burgundy and gold once per palette version (now v3, darker burgundy). */
     public static void applyDefaultTheme(@NonNull Context context) {
         android.content.SharedPreferences prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(context);
+        if (!prefs.contains("cleanup_new_music_since")) {
+            // The library was cleaned before this version; library cleanup only checks music added from now on.
+            prefs.edit().putLong("cleanup_new_music_since", System.currentTimeMillis() / 1000).apply();
+        }
+        if (!prefs.getBoolean("covers_from_files_v1", false)) {
+            // Read covers from the files (embedded art, then cover.jpg/folder.jpg) instead of Android's
+            // album-art index, which misses folder covers and keeps stale art.
+            prefs.edit().putBoolean(PreferenceUtil.IGNORE_MEDIA_STORE_ARTWORK, true)
+                    .putBoolean("covers_from_files_v1", true).apply();
+        }
         if (!prefs.getBoolean("brand_cream_default_v1", false)) {
             // Cream (the light theme) as the default look, once; can be changed in Settings.
             PreferenceUtil.getInstance(context).setGeneralTheme("light");
             prefs.edit().putBoolean("brand_cream_default_v1", true).apply();
         }
-        if (!ThemeStore.isConfigured(context, 2)) {
+        if (!ThemeStore.isConfigured(context, 3)) {  // v3: slightly darker burgundy
             ThemeStore.editTheme(context)
                     .primaryColor(BURGUNDY)
                     .accentColor(GOLD)

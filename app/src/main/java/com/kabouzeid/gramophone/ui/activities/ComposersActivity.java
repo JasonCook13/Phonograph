@@ -40,7 +40,7 @@ import com.kabouzeid.gramophone.classical.ComposerLibrary;
 import com.kabouzeid.gramophone.classical.ComposerPlaylists;
 import com.kabouzeid.gramophone.helper.MusicPlayerRemote;
 import com.kabouzeid.gramophone.model.Song;
-import com.kabouzeid.gramophone.ui.activities.base.AbsMusicServiceActivity;
+import com.kabouzeid.gramophone.ui.activities.base.AbsSlidingMusicPanelActivity;
 import com.kabouzeid.gramophone.util.BrandColors;
 
 import java.util.ArrayList;
@@ -56,7 +56,7 @@ import java.util.concurrent.Executors;
  * with the types of work as headings) -> one type of work. Tapping a name carries it up into the
  * toolbar next to the back arrow, and back down again on the way out.
  */
-public class ComposersActivity extends AbsMusicServiceActivity {
+public class ComposersActivity extends AbsSlidingMusicPanelActivity {
     public static final String EXTRA_COMPOSER = "composer";
     public static final String EXTRA_GROUP = "group";
     public static final String EXTRA_TYPE = "type";
@@ -103,9 +103,12 @@ public class ComposersActivity extends AbsMusicServiceActivity {
         return composerName != null && typeName == null;
     }
 
+    private Toolbar toolbar;
+    private View searchBar;
+
+    /** Called from super.onCreate(): builds the screen inside the sliding now-playing panel. */
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected View createContentView() {
         composerName = getIntent().getStringExtra(EXTRA_COMPOSER);
         groupName = getIntent().getStringExtra(EXTRA_GROUP);
         typeName = getIntent().getStringExtra(EXTRA_TYPE);
@@ -115,7 +118,7 @@ public class ComposersActivity extends AbsMusicServiceActivity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         getLayoutInflater().inflate(R.layout.status_bar, root, true);
-        Toolbar toolbar = new Toolbar(new androidx.appcompat.view.ContextThemeWrapper(this, R.style.ThemeOverlay_AppCompat_Dark_ActionBar));
+        toolbar = new Toolbar(new androidx.appcompat.view.ContextThemeWrapper(this, R.style.ThemeOverlay_AppCompat_Dark_ActionBar));
         toolbar.setBackgroundColor(primary);
         toolbar.setPopupTheme(R.style.ThemeOverlay_AppCompat_Light);
         LinearLayout titles = new LinearLayout(this);
@@ -149,7 +152,10 @@ public class ComposersActivity extends AbsMusicServiceActivity {
             tabs.setSelectedTabIndicatorColor(BrandColors.GOLD);
             bodyLayout.addView(tabs, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
-        if (composerName != null) bodyLayout.addView(searchBar());
+        if (isComposerPage()) {
+            searchBar = searchBar();
+            bodyLayout.addView(searchBar);
+        }
         FrameLayout content = new FrameLayout(this);
         bodyLayout.addView(content, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         if (isComposerPage()) {
@@ -158,6 +164,14 @@ public class ComposersActivity extends AbsMusicServiceActivity {
             pagesAdapter = new PagesAdapter();
             pager.setAdapter(pagesAdapter);
             tabs.setupWithViewPager(pager);
+            pager.addOnPageChangeListener(new androidx.viewpager.widget.ViewPager.SimpleOnPageChangeListener() {
+                @Override
+                public void onPageSelected(int position) {
+                    // search belongs to "All works"; the group tabs just list their works
+                    searchBar.setVisibility(position == 0 ? View.VISIBLE : View.GONE);
+                    if (position != 0) hideKeyboard();
+                }
+            });
             content.addView(pager);
         } else {
             list = new RecyclerView(this);
@@ -174,8 +188,16 @@ public class ComposersActivity extends AbsMusicServiceActivity {
         empty.setGravity(Gravity.CENTER);
         empty.setVisibility(View.GONE);
         content.addView(empty);
-        setContentView(root);
+        @android.annotation.SuppressLint("InflateParams")
+        View panel = getLayoutInflater().inflate(R.layout.sliding_music_panel_layout, null);
+        ((ViewGroup) panel.findViewById(R.id.content_container)).addView(root,
+                new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        return panel;
+    }
 
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
         setDrawUnderStatusbar();
         setStatusbarColorAuto();
         setNavigationbarColorAuto();
@@ -257,6 +279,7 @@ public class ComposersActivity extends AbsMusicServiceActivity {
 
     @Override
     public void onBackPressed() {
+        if (handleBackPress()) return;  // collapse the now-playing panel first
         if (exiting) return;
         if (getIntent().hasExtra(EXTRA_FROM_Y)) {
             exiting = true;
@@ -302,17 +325,17 @@ public class ComposersActivity extends AbsMusicServiceActivity {
         if (isTypePage()) {
             if (composer != null) {
                 List<ComposerLibrary.Work> works = new ArrayList<>();
-                for (ComposerLibrary.Work w : filtered(composer.works)) {
+                for (ComposerLibrary.Work w : composer.works) {
                     String c = w.category == null || w.category.isEmpty() ? w.group : w.category;
                     if (typeName.equals(c) && (groupName == null || groupName.equals(w.group))) works.add(w);
                 }
                 ComposerLibrary.sortWorks(works, sort);
                 if (!works.isEmpty()) {
-                    rows.add(new Category(typeName, works, false));
+                    rows.add(new GroupHeader(works));
                     rows.addAll(works);
                 }
             }
-            empty.setText(query.isEmpty() ? "Nothing found." : "No works match \"" + query + "\".");
+            empty.setText("Nothing found.");
         } else {
             rows.addAll(library.composers);
             empty.setText("No classical music found.\n\nTracks show up here when they have a composer tag, sit in a "
@@ -335,7 +358,9 @@ public class ComposersActivity extends AbsMusicServiceActivity {
             all.rows.add(new Header());
             all.rows.addAll(works);
             pages.add(all);
-            for (Map.Entry<String, LinkedHashMap<String, List<ComposerLibrary.Work>>> g : ComposerLibrary.byGroup(works).entrySet()) {
+            List<ComposerLibrary.Work> everything = new ArrayList<>(composer.works);
+            ComposerLibrary.sortWorks(everything, sort);
+            for (Map.Entry<String, LinkedHashMap<String, List<ComposerLibrary.Work>>> g : ComposerLibrary.byGroup(everything).entrySet()) {
                 Page page = new Page(ComposerLibrary.groupLabel(g.getKey()), g.getKey());
                 List<ComposerLibrary.Work> inGroup = new ArrayList<>();
                 for (List<ComposerLibrary.Work> l : g.getValue().values()) inGroup.addAll(l);
@@ -409,6 +434,11 @@ public class ComposersActivity extends AbsMusicServiceActivity {
         }
     }
 
+    private void hideKeyboard() {
+        android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null && searchBar != null) imm.hideSoftInputFromWindow(searchBar.getWindowToken(), 0);
+    }
+
     // ---------------------------------------------------------------------------------------
     // Search: "op 10", "trio", "razumovsky", "bwv 1046"
     // ---------------------------------------------------------------------------------------
@@ -423,14 +453,6 @@ public class ComposersActivity extends AbsMusicServiceActivity {
         field.setSingleLine(true);
         field.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
         bar.addView(field, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        Button play = new Button(this, null, R.attr.borderlessButtonStyle);
-        play.setText("Play");
-        play.setTextColor(accent);
-        Button save = new Button(this, null, R.attr.borderlessButtonStyle);
-        save.setText("Save");
-        save.setTextColor(accent);
-        bar.addView(play);
-        bar.addView(save);
         field.addTextChangedListener(new android.text.TextWatcher() {
             public void beforeTextChanged(CharSequence c, int a, int b, int d) {}
             public void onTextChanged(CharSequence c, int a, int b, int d) {}
@@ -439,9 +461,6 @@ public class ComposersActivity extends AbsMusicServiceActivity {
                 if (library != null) buildRows();
             }
         });
-        play.setOnClickListener(v -> play(ComposerLibrary.tracksInOrder(visibleWorks())));
-        save.setOnClickListener(v -> askPlaylistName(defaultName(query.isEmpty()
-                ? (isTypePage() ? typeName : "Works in Order of Composition") : query), visibleWorks()));
         return bar;
     }
 
@@ -735,9 +754,13 @@ public class ComposersActivity extends AbsMusicServiceActivity {
             l.addView(summary);
             playAll = new Button(ComposersActivity.this, null, R.attr.borderlessButtonStyle);
             playAll.setTextColor(accent);
-            playAll.setText("Play everything in this order");
+            playAll.setText("Play in this order");
             l.addView(playAll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            toggle = new FrameLayout(ComposersActivity.this);
+            l.addView(toggle);
         }
+
+        final FrameLayout toggle;
 
         void bind() {
             if (composer == null) return;
@@ -754,6 +777,8 @@ public class ComposersActivity extends AbsMusicServiceActivity {
                 sb.append(" No chronology for this composer yet, so works are sorted by title.");
             }
             summary.setText(sb);
+            toggle.removeAllViews();
+            toggle.addView(orderToggle());
             playAll.setOnClickListener(v -> play(ComposerLibrary.tracksInOrder(pages.isEmpty()
                     ? new ArrayList<>() : worksOf(pages.get(0).rows))));
         }
@@ -762,25 +787,33 @@ public class ComposersActivity extends AbsMusicServiceActivity {
     private class GroupHeaderHolder extends RecyclerView.ViewHolder {
         final TextView count;
         final Button play;
+        final FrameLayout toggle;
 
         GroupHeaderHolder() {
             super(new LinearLayout(ComposersActivity.this));
             LinearLayout l = (LinearLayout) itemView;
-            l.setOrientation(LinearLayout.HORIZONTAL);
-            l.setGravity(Gravity.CENTER_VERTICAL);
+            l.setOrientation(LinearLayout.VERTICAL);
             l.setPadding(dp(16), dp(4), dp(8), 0);
             l.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            count = text(R.style.TextAppearance_AppCompat_Caption);
-            l.addView(count, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            LinearLayout row = new LinearLayout(ComposersActivity.this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            count = text(R.style.TextAppearance_AppCompat_Body1);
+            row.addView(count, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
             play = new Button(ComposersActivity.this, null, R.attr.borderlessButtonStyle);
             play.setTextColor(accent);
-            play.setText("Play tab in order");
-            l.addView(play);
+            row.addView(play);
+            l.addView(row);
+            toggle = new FrameLayout(ComposersActivity.this);
+            l.addView(toggle);
         }
 
         void bind(GroupHeader g) {
             count.setText(g.works.size() + (g.works.size() == 1 ? " work" : " works"));
+            play.setText(isTypePage() ? "Play in order" : "Play tab in order");
             play.setOnClickListener(v -> play(ComposerLibrary.tracksInOrder(g.works)));
+            toggle.removeAllViews();
+            toggle.addView(orderToggle());
         }
     }
 
@@ -887,6 +920,42 @@ public class ComposersActivity extends AbsMusicServiceActivity {
                 return true;
             });
         }
+    }
+
+    /** "Composition order · Opus order": the gold one is active; tap the other to switch. */
+    private View orderToggle() {
+        LinearLayout l = new LinearLayout(this);
+        l.setOrientation(LinearLayout.HORIZONTAL);
+        l.setGravity(Gravity.CENTER_VERTICAL);
+        String[] labels = {"Composition order", "Opus order"};
+        ComposerLibrary.Sort[] sorts = {ComposerLibrary.Sort.COMPOSITION, ComposerLibrary.Sort.CATALOGUE};
+        for (int i = 0; i < 2; i++) {
+            if (i == 1) {
+                TextView dot = text(R.style.TextAppearance_AppCompat_Caption);
+                dot.setText("·");
+                l.addView(dot);
+            }
+            final ComposerLibrary.Sort target = sorts[i];
+            TextView t = text(R.style.TextAppearance_AppCompat_Body1);
+            t.setText(labels[i]);
+            t.setPadding(dp(8), dp(10), dp(8), dp(10));
+            boolean active = sort == target;
+            if (active) {
+                t.setTextColor(accent);
+                t.setTypeface(Typeface.DEFAULT_BOLD);
+            } else {
+                t.setAlpha(0.7f);
+                TypedValue tv = new TypedValue();
+                getTheme().resolveAttribute(android.R.attr.selectableItemBackground, tv, true);
+                t.setBackgroundResource(tv.resourceId);
+                t.setOnClickListener(v -> {
+                    sort = target;
+                    buildRows();
+                });
+            }
+            l.addView(t);
+        }
+        return l;
     }
 
     private TextView text(int appearance) {

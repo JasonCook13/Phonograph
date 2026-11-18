@@ -2,6 +2,7 @@ package com.kabouzeid.gramophone.cleanup;
 
 /** Kinds of fixes the cleanup tool can make. Each can be switched on or off. */
 public enum Category {
+    GENRE("Set the genre from the folder it's in (Music/Jazz/... → Jazz)"),
     CLASSICAL("Classical: fill in the composer and use it as album artist"),
     MISSING_INFO("Fill in missing artist/album from folders"),
     TITLES("Turn file names into proper titles"),

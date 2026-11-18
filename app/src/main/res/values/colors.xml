@@ -2,8 +2,10 @@
 <resources>
 
     <!--grey 300-->
-    <color name="ic_launcher_background">#7A1E33</color>
-    <color name="brand_burgundy">#7A1E33</color>
+    <color name="ic_launcher_background">#6B1A2D</color>
+    <color name="brand_burgundy">#6B1A2D</color>
+    <color name="brand_burgundy_dark">#561524</color>
+    <color name="brand_burgundy_darker">#40101B</color>
     <color name="brand_gold">#D6AC52</color>
     <color name="brand_cream">#F2ECE0</color>
     <color name="brand_cream_card">#F8F4EC</color>

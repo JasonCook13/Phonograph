@@ -36,6 +36,7 @@ import com.kabouzeid.gramophone.ui.activities.MainActivity;
 import com.kabouzeid.gramophone.ui.activities.SearchActivity;
 import com.kabouzeid.gramophone.ui.fragments.mainactivity.AbsMainActivityFragment;
 import com.kabouzeid.gramophone.ui.fragments.mainactivity.library.pager.AbsLibraryPagerRecyclerViewCustomGridSizeFragment;
+import com.kabouzeid.gramophone.ui.fragments.mainactivity.library.pager.ComposersFragment;
 import com.kabouzeid.gramophone.ui.fragments.mainactivity.library.pager.AlbumsFragment;
 import com.kabouzeid.gramophone.ui.fragments.mainactivity.library.pager.ArtistsFragment;
 import com.kabouzeid.gramophone.ui.fragments.mainactivity.library.pager.PlaylistsFragment;
@@ -202,6 +203,16 @@ public class LibraryFragment extends AbsMainActivityFragment implements CabHolde
             menu.findItem(R.id.action_colored_footers).setEnabled(absLibraryRecyclerViewCustomGridSizeFragment.canUsePalette());
 
             setUpSortOrderMenu(absLibraryRecyclerViewCustomGridSizeFragment, menu.findItem(R.id.action_sort_order).getSubMenu());
+        } else if (currentFragment instanceof ComposersFragment && currentFragment.isAdded()) {
+            menu.removeItem(R.id.action_grid_size);
+            menu.removeItem(R.id.action_colored_footers);
+            SubMenu sortMenu = menu.findItem(R.id.action_sort_order).getSubMenu();
+            sortMenu.clear();
+            int current = ((ComposersFragment) currentFragment).getSort();
+            sortMenu.add(0, R.id.action_composer_sort_name, 0, R.string.composer_sort_name).setChecked(current == ComposersFragment.SORT_NAME);
+            sortMenu.add(0, R.id.action_composer_sort_works, 1, R.string.composer_sort_works).setChecked(current == ComposersFragment.SORT_WORKS);
+            sortMenu.add(0, R.id.action_composer_sort_plays, 2, R.string.composer_sort_plays).setChecked(current == ComposersFragment.SORT_PLAYS);
+            sortMenu.setGroupCheckable(0, true, true);
         } else {
             menu.removeItem(R.id.action_grid_size);
             menu.removeItem(R.id.action_colored_footers);
@@ -235,6 +246,18 @@ public class LibraryFragment extends AbsMainActivityFragment implements CabHolde
                 return true;
             }
             if (handleSortOrderMenuItem(absLibraryRecyclerViewCustomGridSizeFragment, item)) {
+                return true;
+            }
+        }
+
+        if (currentFragment instanceof ComposersFragment) {
+            int sort = -1;
+            if (item.getItemId() == R.id.action_composer_sort_name) sort = ComposersFragment.SORT_NAME;
+            else if (item.getItemId() == R.id.action_composer_sort_works) sort = ComposersFragment.SORT_WORKS;
+            else if (item.getItemId() == R.id.action_composer_sort_plays) sort = ComposersFragment.SORT_PLAYS;
+            if (sort >= 0) {
+                item.setChecked(true);
+                ((ComposersFragment) currentFragment).setSort(sort);
                 return true;
             }
         }

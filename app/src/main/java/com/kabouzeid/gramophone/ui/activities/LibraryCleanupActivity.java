@@ -62,7 +62,9 @@ import java.util.concurrent.Executors;
 public class LibraryCleanupActivity extends AbsBaseActivity {
     private static final int REQUEST_WRITE_PERMISSION = 4711;
     private static final int REQUEST_IMPORT = 4712;
-    private static final int MENU_RESCAN = 1, MENU_EXPORT = 2, MENU_IMPORT = 3;
+    private static final int MENU_RESCAN = 1, MENU_EXPORT = 2, MENU_IMPORT = 3, MENU_CHECKED = 4, MENU_WHOLE = 5;
+    /** Songs added after this time (seconds) count as new music to check. */
+    public static final String PREF_SINCE = "cleanup_new_music_since";
     private static final int MAX_URIS_PER_REQUEST = 500;
 
     /** Survives rotation / leaving the screen; the scan is expensive. */
@@ -70,6 +72,8 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
         enum State {INTRO, SCANNING, RESULTS}
 
         State state = State.INTRO;
+        boolean wholeLibrary;
+        long scanStartedSeconds;
         int progressDone, progressTotal;
         List<FileTags> files = new ArrayList<>();
         int unreadable;
@@ -137,7 +141,19 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
         Button scan = findViewById(R.id.cleanup_scan);
         tintButton(scan);
         tintButton(fixAll);
-        scan.setOnClickListener(v -> startScan());
+        scan.setText(newMusicLabel());
+        scan.setOnClickListener(v -> {
+            session.wholeLibrary = false;
+            startScan();
+        });
+        Button whole = new Button(this, null, R.attr.borderlessButtonStyle);
+        whole.setText("Check the whole library");
+        whole.setTextColor(accent);
+        whole.setOnClickListener(v -> {
+            session.wholeLibrary = true;
+            startScan();
+        });
+        ((ViewGroup) scan.getParent()).addView(whole, ((ViewGroup) scan.getParent()).indexOfChild(scan) + 1);
         Button importButton = findViewById(R.id.cleanup_import);
         importButton.setTextColor(accent);
         importButton.setOnClickListener(v -> pickFixesFile());
@@ -189,6 +205,8 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         menu.add(0, MENU_RESCAN, 0, R.string.cleanup_rescan);
+        menu.add(0, MENU_CHECKED, 0, "Mark new music as checked");
+        menu.add(0, MENU_WHOLE, 0, "Check the whole library");
         menu.add(0, MENU_EXPORT, 1, "Export tags for Claude");
         menu.add(0, MENU_IMPORT, 2, "Import fixes from Claude");
         return true;
@@ -201,6 +219,10 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
         if (rescan != null) rescan.setVisible(session.state == Session.State.RESULTS && idle);
         MenuItem export = menu.findItem(MENU_EXPORT);
         if (export != null) export.setVisible(session.state == Session.State.RESULTS && idle && !session.files.isEmpty());
+        MenuItem checked = menu.findItem(MENU_CHECKED);
+        if (checked != null) checked.setVisible(session.state == Session.State.RESULTS && idle && !session.wholeLibrary);
+        MenuItem whole = menu.findItem(MENU_WHOLE);
+        if (whole != null) whole.setVisible(session.state == Session.State.RESULTS && idle && !session.wholeLibrary);
         MenuItem imp = menu.findItem(MENU_IMPORT);
         if (imp != null) imp.setVisible(idle);
         return super.onPrepareOptionsMenu(menu);
@@ -218,6 +240,16 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
             startScan();
             return true;
         }
+        if (item.getItemId() == MENU_CHECKED) {
+            markChecked();
+            return true;
+        }
+        if (item.getItemId() == MENU_WHOLE) {
+            session.decided.clear();
+            session.wholeLibrary = true;
+            startScan();
+            return true;
+        }
         if (item.getItemId() == MENU_EXPORT) {
             exportTags();
             return true;
@@ -227,6 +259,25 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
             return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    private long since() {
+        return android.preference.PreferenceManager.getDefaultSharedPreferences(this).getLong(PREF_SINCE, 0);
+    }
+
+    private String newMusicLabel() {
+        long since = since();
+        if (since <= 0) return "Check new music";
+        return "Check music added since " + android.text.format.DateFormat.getMediumDateFormat(this).format(new java.util.Date(since * 1000));
+    }
+
+    /** New music has been looked at: next time, only music added after this scan counts as new. */
+    private void markChecked() {
+        long t = session.scanStartedSeconds > 0 ? session.scanStartedSeconds : System.currentTimeMillis() / 1000;
+        android.preference.PreferenceManager.getDefaultSharedPreferences(this).edit().putLong(PREF_SINCE, t).apply();
+        Toast.makeText(this, "Marked as checked. Next time, only music added after now is new.", Toast.LENGTH_LONG).show();
+        Button scan = findViewById(R.id.cleanup_scan);
+        if (scan != null) scan.setText(newMusicLabel());
     }
 
     // ---------------------------------------------------------------------------------------
@@ -246,13 +297,15 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
         s.cancelled = false;
         render();
         final android.content.Context app = getApplicationContext();
+        final long since = s.wholeLibrary ? 0 : since();
+        s.scanStartedSeconds = System.currentTimeMillis() / 1000;
         EXECUTOR.execute(() -> {
             CleanupScanner.Result result = CleanupScanner.scan(app, (done, total) -> {
                 s.progressDone = done;
                 s.progressTotal = total;
                 if (done % 25 == 0 || done == total) main.post(LibraryCleanupActivity::refreshProgress);
                 return !s.cancelled;
-            });
+            }, since);
             s.files = result.files;
             s.unreadable = result.unreadable;
             List<AlbumFix> fixes = CleanupPlanner.plan(s.files, s.enabled, new CleanupScanner.FolderCovers(), composers(app));
@@ -444,6 +497,7 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
             final String log = writer.getLogFile().getPath();
             main.post(() -> {
                 s.applying = false;
+                if (!s.wholeLibrary && needPermission.isEmpty() && pending().isEmpty() && current != null) current.markChecked();
                 if (!needPermission.isEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && current != null) {
                     s.waitingForPermission.clear();
                     s.waitingForPermission.addAll(needPermission);
@@ -570,7 +624,7 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
         Session s = session;
         progressBar.setMax(Math.max(1, s.progressTotal));
         progressBar.setProgress(s.progressDone);
-        progressText.setText(s.progressTotal == 0 ? "Finding songs…"
+        progressText.setText(s.progressTotal == 0 ? (s.wholeLibrary ? "Finding songs…" : "Finding new music…")
                 : "Reading tags… " + s.progressDone + " / " + s.progressTotal);
     }
 
@@ -673,11 +727,17 @@ public class LibraryCleanupActivity extends AbsBaseActivity {
                 sb.append(" Changes marked \"check\" are ones Claude wasn't sure about; untick them to leave them out.");
                 sb.append("\n\nTry Fix on a few albums first. Use ⋮ → Scan again to go back to the tool's own suggestions.");
             } else {
-                sb.append("Read ").append(s.files.size()).append(" songs. ");
-                if (s.fixes.isEmpty()) sb.append("Everything already looks consistent.");
+                if (!s.wholeLibrary && s.files.isEmpty() && s.unreadable == 0) {
+                    sb.append("No new music since you last checked.");
+                } else {
+                    sb.append(s.wholeLibrary ? "Read " : "Read ").append(s.files.size())
+                            .append(s.wholeLibrary ? " songs. " : " new songs. ");
+                }
+                if (s.fixes.isEmpty()) sb.append(s.files.isEmpty() ? "" : "Everything already looks consistent.");
                 else sb.append("Suggested ").append(changes).append(" changes across ").append(s.fixes.size()).append(" albums.");
                 if (s.unreadable > 0) sb.append("\n").append(s.unreadable).append(" files couldn't be read and are left alone.");
                 sb.append("\n\nTry Fix on a few albums, check them in your library, then use Fix all.");
+                if (!s.wholeLibrary) sb.append(" When you're done, ⋮ → Mark new music as checked (Fix all does this for you).");
                 sb.append(" For classical identification and other judgment calls, use ⋮ → Export tags for Claude.");
             }
             summary.setText(sb);

@@ -227,6 +227,11 @@
     <string name="up_next">Up next</string>
     <string name="pref_title_now_playing_screen_appearance">Appearance</string>
     <string name="intro_label">Introduction</string>
+    <string name="intro_welcome">Your music player, built around your own library: albums, composers and genres, in burgundy and gold.</string>
+    <string name="intro_composers">The Composers tab lists everyone in your classical collection. Tap a composer and their name moves up beside the back arrow. Their page has all their works in the order they were written, with tabs to swipe through: Orchestral, Concertos, Chamber, Piano, Vocal and Stage. Tap a heading like String Quartets to open just those works. Switch between composition order and opus order, and Play in order plays them the way they were written.</string>
+    <string name="intro_albums">Albums show the cover from each album\'s files or folder. Use ⋮ → Sort order → Genre to group them by genre, with a line between each genre. The Composers list can be sorted by name, number of works or what you play most.</string>
+    <string name="intro_new_music_title">Adding music</string>
+    <string name="intro_new_music">Put new albums in a genre folder (Music/Jazz/Artist/Album). Then open Library cleanup from the side menu: it checks just the music added since last time and suggests fixes, like the genre, composer, album artist and missing covers, so new albums match the rest.</string>
     <string name="welcome_to_phonograph">"Welcome to Phonograph, a beautiful and lightweight music player for Android. "</string>
     <string name="open_playing_queue_instruction">Swipe the card in the now playing screen up to reveal the full playing queue.</string>
     <string name="rearrange_playing_queue_instruction">Rearrange the playing queue by dragging a song from its track number.</string>
@@ -314,8 +319,8 @@
     <string name="pref_title_smart_library">Smart library</string>
     <string name="pref_summary_smart_library">Merge split albums and duplicate artists (\"feat.\", spelling), tidy titles taken from file names and fill in missing artist/album names from folders. Your files are not changed.</string>
     <string name="library_cleanup">Clean up library</string>
-    <string name="cleanup_intro_title">Make your music library consistent</string>
-    <string name="cleanup_intro_body">This scans the tags inside every song on your phone and suggests fixes, album by album:\n\n• Fill in missing artist and album names from your folders\n• Turn file names like \"01 - my_song\" into proper titles\n• Move \"feat.\" artists into the song title so each artist appears once\n• Use one spelling per artist and album\n• Set the album artist so albums don\'t split apart\n• Add missing track numbers from file names\n• Add missing album art from the album\'s other tracks or a cover image in its folder\n\nNothing is changed until you tap Fix on an album, or Fix all. Changes are written into the music files themselves, so they also show up in other players. Every change is recorded in a log file.</string>
+    <string name="cleanup_intro_title">Tidy up new music</string>
+    <string name="cleanup_intro_body">Your library has already been cleaned and organized. This is for music you add from now on: it reads the tags of songs added since you last checked and suggests fixes, album by album, so new albums match the rest:\n\n• Set the genre from the folder you put it in (Music/Jazz/… → Jazz), so Albums by genre and the Genres tab stay right\n• Classical: fill in the composer and use it as album artist, so it lands on the Composers tab\n• Fill in missing artist and album names from the folders\n• Turn file names like \"01 - my_song\" into proper titles\n• Move \"feat.\" artists into the song title so each artist appears once\n• Use one spelling per artist and album\n• Set the album artist so albums don\'t split apart\n• Add missing track numbers from file names\n• Add missing album art from the album\'s other tracks or a cover image in its folder\n\nNothing changes until you tap Fix on an album, or Fix all. Changes are written into the music files, so they show up in other players too, and every change is recorded in a log file.</string>
     <string name="cleanup_scan">Scan my music</string>
     <string name="cleanup_rescan">Scan again</string>
     <string name="cleanup_fix">Fix</string>
@@ -324,6 +329,9 @@
     <string name="cleanup_fix_all">Fix all</string>
     <string name="composers">Composers</string>
     <string name="no_composers">No classical music found.</string>
+    <string name="composer_sort_name">Name (A–Z by surname)</string>
+    <string name="composer_sort_works">Most works</string>
+    <string name="composer_sort_plays">Most played</string>
     <string name="cleanup_import">Import fixes from Claude</string>
     <string name="cleanup_claude_body">Got a fixes file from Claude? After a scan, use ⋮ → Export tags for Claude to send it your tags; it sends back a file of suggested fixes (classical works, performers, judgment calls). Open that file here to review it the same way.</string>
 </resources>
