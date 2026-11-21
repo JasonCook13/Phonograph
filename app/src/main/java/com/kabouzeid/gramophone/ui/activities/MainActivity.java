@@ -86,6 +86,8 @@ public class MainActivity extends AbsSlidingMusicPanelActivity {
         }
 
         setUpDrawerLayout();
+        // Build the classical library in the background so the Composers tab opens quickly.
+        com.kabouzeid.gramophone.classical.ComposerLibrary.prewarm(this);
 
         if (savedInstanceState == null) {
             setMusicChooser(PreferenceUtil.getInstance(this).getLastMusicChooser());

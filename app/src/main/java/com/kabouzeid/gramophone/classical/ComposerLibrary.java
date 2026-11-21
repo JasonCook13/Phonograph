@@ -3,6 +3,7 @@ package com.kabouzeid.gramophone.classical;
 import android.content.Context;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.kabouzeid.gramophone.loader.SongLoader;
 import com.kabouzeid.gramophone.model.Song;
@@ -198,30 +199,125 @@ public final class ComposerLibrary {
 
     public final List<Composer> composers;
 
+    /** Fingerprint of the songs it was built from; a rebuild with the same songs reuses this library. */
+    private long signature;
+
     private ComposerLibrary(List<Composer> composers) {
         this.composers = composers;
     }
 
     private static volatile ComposerLibrary cached;
+    private static volatile boolean stale;
 
     /** Builds (or returns the cached) library. Blocking: call off the UI thread. */
     @NonNull
     public static ComposerLibrary get(@NonNull Context context, boolean refresh) {
         ComposerLibrary c = cached;
-        if (c != null && !refresh) return c;
+        if (c != null && !refresh && !stale) return c;
         synchronized (ComposerLibrary.class) {
-            if (cached == null || refresh) cached = build(context);
+            if (cached == null || refresh || stale) {
+                List<Song> songs = SongLoader.getAllSongsRaw(context);
+                long sig = signature(songs);
+                if (cached == null || cached.signature != sig) {
+                    cached = build(context, songs);
+                    cached.signature = sig;
+                    saveSnapshot(context, cached);
+                }
+                stale = false;
+            }
             return cached;
         }
     }
 
-    public static void invalidate() {
-        cached = null;
+    @Nullable
+    public static ComposerLibrary peek() {
+        return stale ? null : cached;
     }
 
-    private static ComposerLibrary build(Context context) {
+    /** The music may have changed: check (cheaply) next time, and rebuild only if it really did. */
+    public static void invalidate() {
+        stale = true;
+    }
+
+    /** Starts building in the background (call at app start) so the Composers tab is ready when opened. */
+    public static void prewarm(@NonNull Context context) {
+        final Context app = context.getApplicationContext();
+        Thread t = new Thread(() -> {
+            try {
+                get(app, false);
+            } catch (Throwable ignored) {
+            }
+        }, "composers-prewarm");
+        t.setPriority(Thread.MIN_PRIORITY);
+        t.start();
+    }
+
+    private static long signature(List<Song> songs) {
+        long h = songs.size();
+        for (Song s : songs) {
+            h = h * 31 + s.id;
+            h = h * 31 + s.dateModified;
+            h = h * 31 + (s.title == null ? 0 : s.title.hashCode());
+            h = h * 31 + (s.composer == null ? 0 : s.composer.hashCode());
+        }
+        return h;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Snapshot of the composer list, so the tab shows instantly while the library is (re)built
+    // ---------------------------------------------------------------------------------------
+
+    /** What the Composers tab shows for one composer. */
+    public static final class Summary {
+        public final String name, sortName;
+        public final int works, tracks;
+        public final boolean chronology;
+
+        public Summary(String name, String sortName, int works, int tracks, boolean chronology) {
+            this.name = name;
+            this.sortName = sortName;
+            this.works = works;
+            this.tracks = tracks;
+            this.chronology = chronology;
+        }
+
+        public static Summary of(Composer c) {
+            return new Summary(c.name, c.sortName(), c.works.size(), c.trackCount(), c.chrono != null);
+        }
+    }
+
+    private static java.io.File snapshotFile(Context context) {
+        return new java.io.File(context.getApplicationContext().getFilesDir(), "composers_snapshot.tsv");
+    }
+
+    private static void saveSnapshot(Context context, ComposerLibrary lib) {
+        try (java.io.Writer w = new java.io.OutputStreamWriter(new java.io.FileOutputStream(snapshotFile(context)), "UTF-8")) {
+            for (Composer c : lib.composers) {
+                Summary s = Summary.of(c);
+                w.write(s.name.replace('\t', ' ') + "\t" + s.sortName.replace('\t', ' ') + "\t" + s.works + "\t" + s.tracks + "\t" + (s.chronology ? 1 : 0) + "\n");
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** The composer list as last built (empty if never built). Fast: just reads a small file. */
+    @NonNull
+    public static List<Summary> loadSnapshot(@NonNull Context context) {
+        List<Summary> out = new ArrayList<>();
+        try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(snapshotFile(context)), "UTF-8"))) {
+            String line;
+            while ((line = r.readLine()) != null) {
+                String[] f = line.split("\t");
+                if (f.length < 5) continue;
+                out.add(new Summary(f[0], f[1], Integer.parseInt(f[2]), Integer.parseInt(f[3]), "1".equals(f[4])));
+            }
+        } catch (Throwable ignored) {
+        }
+        return out;
+    }
+
+    private static ComposerLibrary build(Context context, List<Song> songs) {
         Chronology chronology = ChronologyLoader.get(context);
-        List<Song> songs = SongLoader.getAllSongsRaw(context);
 
         Map<String, Composer> composers = new LinkedHashMap<>();
         Map<String, Work> works = new HashMap<>();

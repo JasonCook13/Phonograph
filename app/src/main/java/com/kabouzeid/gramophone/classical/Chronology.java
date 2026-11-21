@@ -170,8 +170,20 @@ public final class Chronology {
      * The composer a name refers to: "Johann Sebastian Bach", "Bach", "J.S. Bach",
      * "Bach, Johann Sebastian", "BACH, JOHANN SEBASTIAN (1685-1750)". Null if unknown.
      */
+    private final java.util.concurrent.ConcurrentHashMap<String, Object> findCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Object NOT_FOUND = new Object();
+
+    /** Same answer for the same text, so it's worked out once per distinct name (tags repeat a lot). */
     public Composer findComposer(String name) {
         if (name == null) return null;
+        Object hit = findCache.get(name);
+        if (hit != null) return hit == NOT_FOUND ? null : (Composer) hit;
+        Composer found = findComposerUncached(name);
+        findCache.put(name, found == null ? NOT_FOUND : found);
+        return found;
+    }
+
+    private Composer findComposerUncached(String name) {
         String raw = name.replaceAll("\\(.*?\\)", " ").trim();
         if (raw.isEmpty()) return null;
         // "Last, First" -> "First Last"

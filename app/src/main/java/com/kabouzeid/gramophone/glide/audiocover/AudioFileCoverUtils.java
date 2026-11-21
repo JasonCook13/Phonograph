@@ -15,7 +15,7 @@ import org.jaudiotagger.tag.images.Artwork;
 
 public class AudioFileCoverUtils {
 
-    public static final String[] FALLBACKS = {"cover.jpg", "album.jpg", "folder.jpg", "cover.png", "album.png", "folder.png"};
+    public static final String[] FALLBACKS = {".cover.jpg", ".folder.jpg", "cover.jpg", "album.jpg", "folder.jpg", "cover.png", "album.png", "folder.png"};
 
 
     public static InputStream fallback(String path) throws FileNotFoundException {

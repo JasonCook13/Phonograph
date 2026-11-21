@@ -28,7 +28,7 @@ import java.util.List;
 
 /** Library tab listing composers; tapping one opens their works page. */
 public class ComposersFragment extends AbsLibraryPagerRecyclerViewFragment<ComposersFragment.ComposerAdapter, LinearLayoutManager>
-        implements LoaderManager.LoaderCallbacks<List<ComposerLibrary.Composer>> {
+        implements LoaderManager.LoaderCallbacks<List<ComposerLibrary.Summary>> {
 
     private static final int LOADER_ID = LoaderIds.COMPOSERS_FRAGMENT;
     public static final int SORT_NAME = 0, SORT_WORKS = 1, SORT_PLAYS = 2;
@@ -46,6 +46,10 @@ public class ComposersFragment extends AbsLibraryPagerRecyclerViewFragment<Compo
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
+        // Show the last known list straight away; the loader replaces it once the library is ready.
+        if (ComposerLibrary.peek() == null && getAdapter().dataSet.isEmpty() && getSort() == SORT_NAME) {
+            getAdapter().swapDataSet(ComposerLibrary.loadSnapshot(requireContext()));
+        }
         getLoaderManager().initLoader(LOADER_ID, null, this);
     }
 
@@ -58,7 +62,7 @@ public class ComposersFragment extends AbsLibraryPagerRecyclerViewFragment<Compo
     @NonNull
     @Override
     protected ComposerAdapter createAdapter() {
-        List<ComposerLibrary.Composer> dataSet = getAdapter() == null ? new ArrayList<>() : getAdapter().dataSet;
+        List<ComposerLibrary.Summary> dataSet = getAdapter() == null ? new ArrayList<>() : getAdapter().dataSet;
         return new ComposerAdapter(getLibraryFragment().getMainActivity(), dataSet);
     }
 
@@ -75,22 +79,22 @@ public class ComposersFragment extends AbsLibraryPagerRecyclerViewFragment<Compo
 
     @NonNull
     @Override
-    public Loader<List<ComposerLibrary.Composer>> onCreateLoader(int id, Bundle args) {
+    public Loader<List<ComposerLibrary.Summary>> onCreateLoader(int id, Bundle args) {
         return new AsyncComposerLoader(getActivity(), getSort());
     }
 
     @Override
-    public void onLoadFinished(@NonNull Loader<List<ComposerLibrary.Composer>> loader, List<ComposerLibrary.Composer> data) {
+    public void onLoadFinished(@NonNull Loader<List<ComposerLibrary.Summary>> loader, List<ComposerLibrary.Summary> data) {
         getAdapter().byName = getSort() == SORT_NAME;
         getAdapter().swapDataSet(data);
     }
 
     @Override
-    public void onLoaderReset(@NonNull Loader<List<ComposerLibrary.Composer>> loader) {
-        getAdapter().swapDataSet(new ArrayList<>());
+    public void onLoaderReset(@NonNull Loader<List<ComposerLibrary.Summary>> loader) {
+        // keep showing what we have
     }
 
-    private static class AsyncComposerLoader extends WrappedAsyncTaskLoader<List<ComposerLibrary.Composer>> {
+    private static class AsyncComposerLoader extends WrappedAsyncTaskLoader<List<ComposerLibrary.Summary>> {
         private final int sort;
 
         AsyncComposerLoader(Context context, int sort) {
@@ -99,7 +103,13 @@ public class ComposersFragment extends AbsLibraryPagerRecyclerViewFragment<Compo
         }
 
         @Override
-        public List<ComposerLibrary.Composer> loadInBackground() {
+        public List<ComposerLibrary.Summary> loadInBackground() {
+            List<ComposerLibrary.Summary> out = new ArrayList<>();
+            for (ComposerLibrary.Composer c : sorted()) out.add(ComposerLibrary.Summary.of(c));
+            return out;
+        }
+
+        private List<ComposerLibrary.Composer> sorted() {
             List<ComposerLibrary.Composer> list = new ArrayList<>(ComposerLibrary.get(getContext(), false).composers);
             if (sort == SORT_WORKS) {
                 java.util.Collections.sort(list, (a, b) -> b.works.size() - a.works.size());
@@ -124,15 +134,15 @@ public class ComposersFragment extends AbsLibraryPagerRecyclerViewFragment<Compo
 
     public static class ComposerAdapter extends RecyclerView.Adapter<ComposerAdapter.ViewHolder> implements FastScrollRecyclerView.SectionedAdapter {
         private final AppCompatActivity activity;
-        List<ComposerLibrary.Composer> dataSet;
+        List<ComposerLibrary.Summary> dataSet;
         boolean byName = true;
 
-        ComposerAdapter(AppCompatActivity activity, List<ComposerLibrary.Composer> dataSet) {
+        ComposerAdapter(AppCompatActivity activity, List<ComposerLibrary.Summary> dataSet) {
             this.activity = activity;
             this.dataSet = dataSet;
         }
 
-        void swapDataSet(List<ComposerLibrary.Composer> dataSet) {
+        void swapDataSet(List<ComposerLibrary.Summary> dataSet) {
             this.dataSet = dataSet;
             notifyDataSetChanged();
         }
@@ -145,16 +155,16 @@ public class ComposersFragment extends AbsLibraryPagerRecyclerViewFragment<Compo
 
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-            ComposerLibrary.Composer c = dataSet.get(position);
+            ComposerLibrary.Summary c = dataSet.get(position);
             if (holder.separator != null) holder.separator.setVisibility(position == getItemCount() - 1 ? View.GONE : View.VISIBLE);
             if (holder.shortSeparator != null) holder.shortSeparator.setVisibility(View.GONE);
             if (holder.menu != null) holder.menu.setVisibility(View.GONE);
             if (holder.title != null) holder.title.setText(c.name);
             if (holder.text != null) {
                 StringBuilder sb = new StringBuilder();
-                sb.append(c.works.size()).append(c.works.size() == 1 ? " work · " : " works · ")
-                        .append(c.trackCount()).append(" tracks");
-                if (c.chrono != null) sb.append(" · in order of composition");
+                sb.append(c.works).append(c.works == 1 ? " work · " : " works · ")
+                        .append(c.tracks).append(c.tracks == 1 ? " track" : " tracks");
+                if (c.chronology) sb.append(" · in order of composition");
                 holder.text.setText(sb);
             }
         }
@@ -167,7 +177,7 @@ public class ComposersFragment extends AbsLibraryPagerRecyclerViewFragment<Compo
         @NonNull
         @Override
         public String getSectionName(int position) {
-            return byName ? MusicUtil.getSectionName(dataSet.get(position).sortName()) : "";
+            return byName ? MusicUtil.getSectionName(dataSet.get(position).sortName) : "";
         }
 
         class ViewHolder extends MediaEntryViewHolder {

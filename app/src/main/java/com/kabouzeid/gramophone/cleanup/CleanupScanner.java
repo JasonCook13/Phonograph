@@ -163,7 +163,7 @@ public final class CleanupScanner {
                 outer:
                 for (String preferred : PREFERRED) {
                     for (File f : images) {
-                        String n = f.getName().toLowerCase(Locale.ROOT);
+                        String n = f.getName().toLowerCase(Locale.ROOT).replaceFirst("^\\.", "");  // ".cover.jpg" is hidden from the gallery
                         if (n.substring(0, n.lastIndexOf('.')).startsWith(preferred)) {
                             found = f.getPath();
                             break outer;
