@@ -36,12 +36,14 @@ import com.google.android.material.tabs.TabLayout;
 import com.kabouzeid.appthemehelper.ThemeStore;
 import com.kabouzeid.appthemehelper.util.ToolbarContentTintHelper;
 import com.kabouzeid.gramophone.R;
+import com.kabouzeid.gramophone.classical.Chronology;
 import com.kabouzeid.gramophone.classical.ComposerLibrary;
 import com.kabouzeid.gramophone.classical.ComposerPlaylists;
 import com.kabouzeid.gramophone.helper.MusicPlayerRemote;
 import com.kabouzeid.gramophone.model.Song;
 import com.kabouzeid.gramophone.ui.activities.base.AbsSlidingMusicPanelActivity;
 import com.kabouzeid.gramophone.util.BrandColors;
+import com.kabouzeid.gramophone.util.MusicUtil;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -60,6 +62,8 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
     public static final String EXTRA_COMPOSER = "composer";
     public static final String EXTRA_GROUP = "group";
     public static final String EXTRA_TYPE = "type";
+    public static final String EXTRA_ALBUM = "album";   // a set: one album's works of one type
+    public static final String EXTRA_WORK = "work";     // one work: its recordings and movements
     private static final String EXTRA_FROM_X = "from_x", EXTRA_FROM_Y = "from_y",
             EXTRA_FROM_SIZE = "from_size", EXTRA_FROM_COLOR = "from_color";
 
@@ -67,7 +71,7 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
     private static ComposerLibrary.Sort sort = ComposerLibrary.Sort.COMPOSITION;
 
     private final Handler main = new Handler(Looper.getMainLooper());
-    private String composerName, groupName, typeName;
+    private String composerName, groupName, typeName, albumName, workKey;
     private ComposerLibrary library;
     private ComposerLibrary.Composer composer;
     private final List<Object> rows = new ArrayList<>();      // composer list / one type of work
@@ -95,12 +99,20 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
         from.overridePendingTransition(android.R.anim.fade_in, 0);
     }
 
+    private boolean isSetPage() {
+        return composerName != null && albumName != null;
+    }
+
+    private boolean isWorkPage() {
+        return composerName != null && workKey != null;
+    }
+
     private boolean isTypePage() {
-        return composerName != null && typeName != null;
+        return composerName != null && typeName != null && albumName == null && workKey == null;
     }
 
     private boolean isComposerPage() {
-        return composerName != null && typeName == null;
+        return composerName != null && typeName == null && albumName == null && workKey == null;
     }
 
     private Toolbar toolbar;
@@ -112,6 +124,8 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
         composerName = getIntent().getStringExtra(EXTRA_COMPOSER);
         groupName = getIntent().getStringExtra(EXTRA_GROUP);
         typeName = getIntent().getStringExtra(EXTRA_TYPE);
+        albumName = getIntent().getStringExtra(EXTRA_ALBUM);
+        workKey = getIntent().getStringExtra(EXTRA_WORK);
         accent = BrandColors.goldText(this);
         int primary = ThemeStore.primaryColor(this);
 
@@ -206,10 +220,12 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
         //noinspection ConstantConditions
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
         getSupportActionBar().setDisplayShowTitleEnabled(false);
-        String title = isTypePage() ? typeName : composerName != null ? composerName : getString(R.string.composers);
+        String title = isSetPage() ? albumName : isWorkPage() ? getIntent().getStringExtra("work_title")
+                : isTypePage() ? typeName : composerName != null ? composerName : getString(R.string.composers);
+        if (title == null) title = composerName;
         setTitle(title);
         titleView.setText(title);
-        if (isTypePage()) {
+        if (isTypePage() || isSetPage() || isWorkPage()) {
             subtitleView.setText(composerName);
             subtitleView.setVisibility(View.VISIBLE);
         }
@@ -322,7 +338,14 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
             return;
         }
         rows.clear();
-        if (isTypePage()) {
+        if (isSetPage()) {
+            if (composer != null) buildSetRows();
+            empty.setText("Nothing found.");
+        } else if (isWorkPage()) {
+            ComposerLibrary.Work w = composer == null ? null : composer.findWork(workKey);
+            if (w != null) buildWorkRows(w);
+            empty.setText("Nothing found.");
+        } else if (isTypePage()) {
             if (composer != null) {
                 List<ComposerLibrary.Work> works = new ArrayList<>();
                 for (ComposerLibrary.Work w : composer.works) {
@@ -332,7 +355,7 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
                 ComposerLibrary.sortWorks(works, sort);
                 if (!works.isEmpty()) {
                     rows.add(new GroupHeader(works));
-                    rows.addAll(works);
+                    rows.addAll(ComposerLibrary.setsAndLooseWorks(works));
                 }
             }
             empty.setText("Nothing found.");
@@ -345,6 +368,67 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
         //noinspection ConstantConditions
         list.getAdapter().notifyDataSetChanged();
         supportInvalidateOptionsMenu();
+    }
+
+    /** A set: the album's works of this type, each with its movements, playable from any movement. */
+    private void buildSetRows() {
+        List<ComposerLibrary.Work> works = new ArrayList<>();
+        for (ComposerLibrary.Work w : composer.works) {
+            String c = w.category == null || w.category.isEmpty() ? w.group : w.category;
+            if (typeName != null && !typeName.equals(c)) continue;
+            if (!ComposerLibrary.recordingsOn(w, albumName).isEmpty()) works.add(w);
+        }
+        ComposerLibrary.sortWorks(works, sort);
+        if (works.isEmpty()) return;
+        List<Song> queue = new ArrayList<>();
+        List<Object> body = new ArrayList<>();
+        int lastOrder = -1;
+        for (int i = 0; i < works.size(); i++) {
+            ComposerLibrary.Work w = works.get(i);
+            // Members of one published set ("Six String Quartets, Op. 18") get a label above them.
+            if (w.chrono != null && w.chrono.order != lastOrder) {
+                int n = 0;
+                for (ComposerLibrary.Work x : works) if (x.chrono != null && x.chrono.order == w.chrono.order) n++;
+                if (n > 1) body.add(new SetLabel(w.chrono));
+            }
+            lastOrder = w.chrono == null ? -1 : w.chrono.order;
+            List<ComposerLibrary.Recording> recs = ComposerLibrary.recordingsOn(w, albumName);
+            body.add(new WorkHeader(w, recs.size() == 1 ? recs.get(0) : null, queue, queue.size()));
+            for (ComposerLibrary.Recording r : recs) {
+                for (Song song : r.tracks) {
+                    body.add(new Movement(song, queue, queue.size(), r.tracks.size() > 1));
+                    queue.add(song);
+                }
+            }
+        }
+        String performers = "";
+        for (ComposerLibrary.Work w : works) {
+            for (ComposerLibrary.Recording r : ComposerLibrary.recordingsOn(w, albumName)) if (!r.performers.isEmpty()) performers = r.performers;
+            if (!performers.isEmpty()) break;
+        }
+        subtitleView.setText(performers.isEmpty() ? composerName : performers + " · " + composerName);
+        rows.add(new PlayHeader(works.size() + (works.size() == 1 ? " work · " : " works · ") + queue.size()
+                + (queue.size() == 1 ? " track · " : " tracks · ") + MusicUtil.getReadableDurationString(total(queue)), queue, true));
+        rows.addAll(body);
+    }
+
+    /** One work: each recording of it with its movements, playable from any movement. */
+    private void buildWorkRows(ComposerLibrary.Work w) {
+        List<String> parts = new ArrayList<>();
+        if (!w.catalogue().isEmpty()) parts.add(w.catalogue());
+        if (w.chrono != null && !w.chrono.date.isEmpty()) parts.add("composed " + w.chrono.date);
+        parts.add(w.recordings.size() + (w.recordings.size() == 1 ? " recording" : " recordings"));
+        rows.add(new PlayHeader(TextUtils.join(" · ", parts), w.preferred().tracks, false));
+        for (ComposerLibrary.Recording r : w.recordings) {
+            rows.add(new RecordingHeader(r));
+            for (int i = 0; i < r.tracks.size(); i++) rows.add(new Movement(r.tracks.get(i), r.tracks, i, r.tracks.size() > 1));
+        }
+    }
+
+    private static long total(List<Song> songs) {
+        long t = 0;
+        for (Song s : songs) t += s.duration;
+        return t;
     }
 
     /** Tabs: "All works", then one per group (Orchestral, Concertos, Chamber, ...) with types as headings. */
@@ -369,7 +453,7 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
                 for (Map.Entry<String, List<ComposerLibrary.Work>> t : g.getValue().entrySet()) {
                     String name = t.getKey().equals(g.getKey()) && g.getValue().size() > 1 ? "Other " + page.title.toLowerCase(Locale.getDefault()) : t.getKey();
                     page.rows.add(new Category(name, t.getValue(), true, t.getKey(), g.getKey()));
-                    page.rows.addAll(t.getValue());
+                    page.rows.addAll(ComposerLibrary.setsAndLooseWorks(t.getValue()));
                 }
                 pages.add(page);
             }
@@ -646,21 +730,19 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
         MusicPlayerRemote.openQueue(songs, 0, true);
     }
 
-    private void onWorkClicked(ComposerLibrary.Work work) {
-        if (work.recordings.size() == 1) {
-            play(work.recordings.get(0).tracks);
-            return;
-        }
-        List<String> items = new ArrayList<>();
-        for (ComposerLibrary.Recording r : work.recordings) {
-            items.add(r.label() + (TextUtils.isEmpty(r.album) ? "" : "\n" + r.album) + "  (" + r.tracks.size()
-                    + (r.tracks.size() == 1 ? " track)" : " tracks)"));
-        }
-        new MaterialDialog.Builder(this)
-                .title(work.title)
-                .items(items)
-                .itemsCallback((d, v, which, text) -> play(work.recordings.get(which).tracks))
-                .show();
+    /** Opens the work's own page: its recordings, each with its movements. */
+    private void openWork(TextView from, ComposerLibrary.Work work) {
+        open(this, from, new Intent(this, ComposersActivity.class)
+                .putExtra(EXTRA_COMPOSER, composerName)
+                .putExtra(EXTRA_WORK, work.key)
+                .putExtra("work_title", work.title));
+    }
+
+    private void openSet(TextView from, ComposerLibrary.Set set, String type) {
+        open(this, from, new Intent(this, ComposersActivity.class)
+                .putExtra(EXTRA_COMPOSER, composerName)
+                .putExtra(EXTRA_TYPE, type)
+                .putExtra(EXTRA_ALBUM, set.album));
     }
 
     // ---------------------------------------------------------------------------------------
@@ -677,6 +759,67 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
 
         GroupHeader(List<ComposerLibrary.Work> works) {
             this.works = works;
+        }
+    }
+
+    /** Top of a set or work page: a summary line and Play. */
+    private static final class PlayHeader {
+        final String text;
+        final List<Song> queue;
+        final boolean withToggle;
+
+        PlayHeader(String text, List<Song> queue, boolean withToggle) {
+            this.text = text;
+            this.queue = queue;
+            this.withToggle = withToggle;
+        }
+    }
+
+    /** "Op. 18 · Six String Quartets · 1798–1800" above the members of a published set. */
+    private static final class SetLabel {
+        final Chronology.Work chrono;
+
+        SetLabel(Chronology.Work chrono) {
+            this.chrono = chrono;
+        }
+    }
+
+    /** A work inside a set page; tapping plays the set from this work. */
+    private static final class WorkHeader {
+        final ComposerLibrary.Work work;
+        final ComposerLibrary.Recording recording;  // null when the album has more than one
+        final List<Song> queue;
+        final int start;
+
+        WorkHeader(ComposerLibrary.Work work, ComposerLibrary.Recording recording, List<Song> queue, int start) {
+            this.work = work;
+            this.recording = recording;
+            this.queue = queue;
+            this.start = start;
+        }
+    }
+
+    /** A recording inside a work page. */
+    private static final class RecordingHeader {
+        final ComposerLibrary.Recording recording;
+
+        RecordingHeader(ComposerLibrary.Recording recording) {
+            this.recording = recording;
+        }
+    }
+
+    /** One movement; tapping plays its queue from here. */
+    private static final class Movement {
+        final Song song;
+        final List<Song> queue;
+        final int index;
+        final boolean indent;
+
+        Movement(Song song, List<Song> queue, int index, boolean indent) {
+            this.song = song;
+            this.queue = queue;
+            this.index = index;
+            this.indent = indent;
         }
     }
 
@@ -712,6 +855,12 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
             if (o instanceof Header) return 0;
             if (o instanceof Category) return 1;
             if (o instanceof GroupHeader) return 3;
+            if (o instanceof ComposerLibrary.Set) return 4;
+            if (o instanceof PlayHeader) return 5;
+            if (o instanceof SetLabel) return 6;
+            if (o instanceof WorkHeader) return 7;
+            if (o instanceof RecordingHeader) return 8;
+            if (o instanceof Movement) return 9;
             return 2;
         }
 
@@ -726,6 +875,11 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
             if (viewType == 0) return new HeaderHolder();
             if (viewType == 1) return new CategoryHolder();
             if (viewType == 3) return new GroupHeaderHolder();
+            if (viewType == 4) return new SetCardHolder();
+            if (viewType == 5) return new PlayHeaderHolder();
+            if (viewType == 6) return new SetLabelHolder();
+            if (viewType == 7 || viewType == 8) return new RowHolder();
+            if (viewType == 9) return new MovementHolder();
             return new RowHolder();
         }
 
@@ -735,6 +889,12 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
             if (holder instanceof HeaderHolder) ((HeaderHolder) holder).bind();
             else if (holder instanceof GroupHeaderHolder) ((GroupHeaderHolder) holder).bind((GroupHeader) o);
             else if (holder instanceof CategoryHolder) ((CategoryHolder) holder).bind((Category) o);
+            else if (holder instanceof SetCardHolder) ((SetCardHolder) holder).bind((ComposerLibrary.Set) o);
+            else if (holder instanceof PlayHeaderHolder) ((PlayHeaderHolder) holder).bind((PlayHeader) o);
+            else if (holder instanceof SetLabelHolder) ((SetLabelHolder) holder).bind((SetLabel) o);
+            else if (holder instanceof MovementHolder) ((MovementHolder) holder).bind((Movement) o);
+            else if (o instanceof WorkHeader) ((RowHolder) holder).bindWorkHeader((WorkHeader) o);
+            else if (o instanceof RecordingHeader) ((RowHolder) holder).bindRecording((RecordingHeader) o);
             else if (o instanceof ComposerLibrary.Composer) ((RowHolder) holder).bindComposer((ComposerLibrary.Composer) o);
             else ((RowHolder) holder).bindWork((ComposerLibrary.Work) o);
         }
@@ -871,6 +1031,7 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
 
     private class RowHolder extends RecyclerView.ViewHolder {
         final TextView title, subtitle;
+        int titleColor;
 
         RowHolder() {
             super(new LinearLayout(ComposersActivity.this));
@@ -883,11 +1044,13 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
             l.setBackgroundResource(tv.resourceId);
             title = text(R.style.TextAppearance_AppCompat_Subhead);
             subtitle = text(R.style.TextAppearance_AppCompat_Caption);
+            titleColor = title.getCurrentTextColor();
             l.addView(title);
             l.addView(subtitle);
         }
 
         void bindComposer(ComposerLibrary.Composer c) {
+            plain();
             title.setText(c.name);
             StringBuilder sb = new StringBuilder();
             sb.append(c.works.size()).append(c.works.size() == 1 ? " work · " : " works · ")
@@ -900,6 +1063,7 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
         }
 
         void bindWork(ComposerLibrary.Work w) {
+            plain();
             title.setText(w.title);
             List<String> parts = new ArrayList<>();
             if (!w.catalogue().isEmpty()) parts.add(w.catalogue());
@@ -907,17 +1071,200 @@ public class ComposersActivity extends AbsSlidingMusicPanelActivity {
             if (w.recordings.size() == 1) parts.add(w.recordings.get(0).label());
             else parts.add(w.recordings.size() + " recordings");
             subtitle.setText(TextUtils.join(" · ", parts));
-            itemView.setOnClickListener(v -> onWorkClicked(w));
+            itemView.setOnClickListener(v -> openWork(title, w));
             itemView.setOnLongClickListener(v -> {
-                // Long press: always choose the recording.
-                List<String> items = new ArrayList<>();
-                for (ComposerLibrary.Recording r : w.recordings) items.add(r.label() + "\n" + r.album);
-                new MaterialDialog.Builder(ComposersActivity.this)
-                        .title(w.title)
-                        .items(items)
-                        .itemsCallback((d, vv, which, text) -> play(w.recordings.get(which).tracks))
-                        .show();
+                play(w.preferred().tracks);  // long press: just play it
                 return true;
+            });
+        }
+
+        /** A work inside a set: bold title, catalogue and date; tap plays the set from here. */
+        void bindWorkHeader(WorkHeader h) {
+            plain();
+            title.setTypeface(Typeface.DEFAULT_BOLD);
+            title.setText(h.work.title);
+            List<String> parts = new ArrayList<>();
+            if (!h.work.catalogue().isEmpty()) parts.add(h.work.catalogue());
+            if (h.work.chrono != null && !h.work.chrono.date.isEmpty()) parts.add("composed " + h.work.chrono.date);
+            if (h.recording != null && h.recording.year > 0) parts.add("recorded " + h.recording.year);
+            subtitle.setText(TextUtils.join(" · ", parts));
+            subtitle.setVisibility(parts.isEmpty() ? View.GONE : View.VISIBLE);
+            itemView.setPadding(dp(16), dp(14), dp(16), dp(2));
+            itemView.setOnClickListener(v -> MusicPlayerRemote.openQueue(h.queue, h.start, true));
+            itemView.setOnLongClickListener(v -> {
+                openWork(title, h.work);  // long press: the work's own page (other recordings)
+                return true;
+            });
+        }
+
+        /** A recording inside a work's page: performers, album, year; tap plays it from the start. */
+        void bindRecording(RecordingHeader h) {
+            plain();
+            title.setTypeface(Typeface.DEFAULT_BOLD);
+            title.setTextColor(accent);
+            title.setText(h.recording.performers.isEmpty() ? "Unknown performers" : h.recording.performers);
+            List<String> parts = new ArrayList<>();
+            if (!h.recording.album.isEmpty()) parts.add(h.recording.album);
+            if (h.recording.year > 0) parts.add(String.valueOf(h.recording.year));
+            parts.add(h.recording.tracks.size() + (h.recording.tracks.size() == 1 ? " track" : " tracks"));
+            subtitle.setText(TextUtils.join(" · ", parts));
+            itemView.setPadding(dp(16), dp(14), dp(16), dp(2));
+            itemView.setOnClickListener(v -> play(h.recording.tracks));
+            itemView.setOnLongClickListener(null);
+        }
+
+        private void plain() {
+            title.setTypeface(Typeface.DEFAULT);
+            title.setTextColor(titleColor);
+            subtitle.setVisibility(View.VISIBLE);
+            itemView.setPadding(dp(16), dp(10), dp(16), dp(10));
+        }
+    }
+
+    /** A movement: "I. Allegro con brio" with its length; tap plays from here. */
+    private class MovementHolder extends RecyclerView.ViewHolder {
+        final TextView name, length;
+
+        MovementHolder() {
+            super(new LinearLayout(ComposersActivity.this));
+            LinearLayout l = (LinearLayout) itemView;
+            l.setOrientation(LinearLayout.HORIZONTAL);
+            l.setGravity(Gravity.CENTER_VERTICAL);
+            l.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            TypedValue tv = new TypedValue();
+            getTheme().resolveAttribute(android.R.attr.selectableItemBackground, tv, true);
+            l.setBackgroundResource(tv.resourceId);
+            name = text(R.style.TextAppearance_AppCompat_Body1);
+            l.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            length = text(R.style.TextAppearance_AppCompat_Caption);
+            length.setPadding(dp(12), 0, 0, 0);
+            l.addView(length);
+        }
+
+        void bind(Movement m) {
+            String t = m.song.title == null ? "" : m.song.title;
+            int colon = t.lastIndexOf(": ");
+            if (colon > 0) t = t.substring(colon + 2);   // "Work, Op. 67: I. Allegro" -> "I. Allegro"
+            name.setText(t);
+            length.setText(MusicUtil.getReadableDurationString(m.song.duration));
+            itemView.setPadding(dp(m.indent ? 32 : 16), dp(8), dp(16), dp(8));
+            itemView.setOnClickListener(v -> MusicPlayerRemote.openQueue(m.queue, m.index, true));
+        }
+    }
+
+    /** Top of a set or work page. */
+    private class PlayHeaderHolder extends RecyclerView.ViewHolder {
+        final TextView summary;
+        final Button play;
+        final FrameLayout toggle;
+
+        PlayHeaderHolder() {
+            super(new LinearLayout(ComposersActivity.this));
+            LinearLayout l = (LinearLayout) itemView;
+            l.setOrientation(LinearLayout.VERTICAL);
+            l.setPadding(dp(16), dp(8), dp(8), 0);
+            l.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            LinearLayout row = new LinearLayout(ComposersActivity.this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            summary = text(R.style.TextAppearance_AppCompat_Body1);
+            row.addView(summary, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            play = new Button(ComposersActivity.this, null, R.attr.borderlessButtonStyle);
+            play.setTextColor(accent);
+            play.setText("Play");
+            row.addView(play);
+            l.addView(row);
+            toggle = new FrameLayout(ComposersActivity.this);
+            l.addView(toggle);
+        }
+
+        void bind(PlayHeader h) {
+            summary.setText(h.text);
+            play.setOnClickListener(v -> play(h.queue));
+            toggle.removeAllViews();
+            if (h.withToggle) toggle.addView(orderToggle());
+        }
+    }
+
+    /** "Op. 18 · Six String Quartets · 1798–1800" */
+    private class SetLabelHolder extends RecyclerView.ViewHolder {
+        final TextView label;
+
+        SetLabelHolder() {
+            super(new FrameLayout(ComposersActivity.this));
+            FrameLayout f = (FrameLayout) itemView;
+            f.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            label = text(R.style.TextAppearance_AppCompat_Caption);
+            label.setTextColor(accent);
+            label.setTypeface(Typeface.DEFAULT_BOLD);
+            label.setAllCaps(true);
+            label.setPadding(dp(16), dp(18), dp(16), 0);
+            f.addView(label);
+        }
+
+        void bind(SetLabel l) {
+            List<String> parts = new ArrayList<>();
+            if (!l.chrono.catalogue.isEmpty()) parts.add(l.chrono.catalogue);
+            parts.add(l.chrono.title);
+            if (!l.chrono.date.isEmpty()) parts.add(l.chrono.date);
+            label.setText(TextUtils.join(" · ", parts));
+        }
+    }
+
+    /** A set card: album, performers, counts, Play; tap opens the set. */
+    private class SetCardHolder extends RecyclerView.ViewHolder {
+        final TextView album, info;
+        final Button play;
+        final View card;
+
+        SetCardHolder() {
+            super(new FrameLayout(ComposersActivity.this));
+            FrameLayout f = (FrameLayout) itemView;
+            f.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            f.setPadding(dp(12), dp(4), dp(12), dp(6));
+            LinearLayout c = new LinearLayout(ComposersActivity.this);
+            c.setOrientation(LinearLayout.HORIZONTAL);
+            c.setGravity(Gravity.CENTER_VERTICAL);
+            android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+            bg.setCornerRadius(dp(10));
+            bg.setColor(com.kabouzeid.appthemehelper.util.ATHUtil.resolveColor(ComposersActivity.this, R.attr.cardBackgroundColor));
+            bg.setStroke(Math.max(1, dp(1) / 2), com.kabouzeid.appthemehelper.util.ATHUtil.resolveColor(ComposersActivity.this, R.attr.dividerColor));
+            c.setBackground(bg);
+            c.setPadding(dp(14), dp(10), dp(6), dp(10));
+            c.setClickable(true);
+            c.setFocusable(true);
+            card = c;
+            LinearLayout texts = new LinearLayout(ComposersActivity.this);
+            texts.setOrientation(LinearLayout.VERTICAL);
+            album = text(R.style.TextAppearance_AppCompat_Subhead);
+            album.setTypeface(Typeface.DEFAULT_BOLD);
+            info = text(R.style.TextAppearance_AppCompat_Caption);
+            texts.addView(album);
+            texts.addView(info);
+            c.addView(texts, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            play = new Button(ComposersActivity.this, null, R.attr.borderlessButtonStyle);
+            play.setTextColor(accent);
+            play.setText("Play");
+            c.addView(play);
+            f.addView(c);
+        }
+
+        void bind(ComposerLibrary.Set set) {
+            album.setText(set.album);
+            List<String> parts = new ArrayList<>();
+            if (!set.performers.isEmpty()) parts.add(set.performers);
+            parts.add(set.works.size() + " works");
+            parts.add(MusicUtil.getReadableDurationString(set.duration));
+            info.setText(TextUtils.join(" · ", parts));
+            String type = set.works.get(0).category == null || set.works.get(0).category.isEmpty() ? set.works.get(0).group : set.works.get(0).category;
+            card.setOnClickListener(v -> openSet(album, set, type));
+            play.setOnClickListener(v -> {
+                List<Song> q = new ArrayList<>();
+                List<ComposerLibrary.Work> ws = new ArrayList<>(set.works);
+                ComposerLibrary.sortWorks(ws, sort);
+                for (ComposerLibrary.Work w : ws)
+                    for (ComposerLibrary.Recording r : ComposerLibrary.recordingsOn(w, set.album)) q.addAll(r.tracks);
+                play(q);
             });
         }
     }

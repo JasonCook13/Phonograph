@@ -36,6 +36,7 @@ import java.util.List;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 
+/** A genre's albums (tap one for its tracks); shuffle plays all its songs. */
 public class GenreDetailActivity extends AbsSlidingMusicPanelActivity implements CabHolder, LoaderManager.LoaderCallbacks<List<Song>> {
 
     private static final int LOADER_ID = LoaderIds.GENRE_DETAIL_ACTIVITY;
@@ -52,7 +53,8 @@ public class GenreDetailActivity extends AbsSlidingMusicPanelActivity implements
     private Genre genre;
 
     private MaterialCab cab;
-    private SongAdapter adapter;
+    private com.kabouzeid.gramophone.adapter.album.AlbumAdapter adapter;
+    private List<Song> songs = new ArrayList<>();
 
     private RecyclerView.Adapter wrappedAdapter;
 
@@ -82,9 +84,10 @@ public class GenreDetailActivity extends AbsSlidingMusicPanelActivity implements
 
     private void setUpRecyclerView() {
         ViewUtil.setUpFastScrollRecyclerViewColor(this, ((FastScrollRecyclerView) recyclerView), ThemeStore.accentColor(this));
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        int columns = getResources().getConfiguration().orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE ? 4 : 2;
+        recyclerView.setLayoutManager(new androidx.recyclerview.widget.GridLayoutManager(this, columns));
 
-        adapter = new SongAdapter(this, new ArrayList<>(), R.layout.item_list, false, this);
+        adapter = new com.kabouzeid.gramophone.adapter.album.AlbumAdapter(this, new ArrayList<>(), R.layout.item_grid, false, this);
         recyclerView.setAdapter(adapter);
 
         adapter.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
@@ -115,7 +118,7 @@ public class GenreDetailActivity extends AbsSlidingMusicPanelActivity implements
         int id = item.getItemId();
         switch (id) {
             case R.id.action_shuffle_genre:
-                MusicPlayerRemote.openAndShuffleQueue(adapter.getDataSet(), true);
+                MusicPlayerRemote.openAndShuffleQueue(songs, true);
                 return true;
             case android.R.id.home:
                 onBackPressed();
@@ -181,14 +184,14 @@ public class GenreDetailActivity extends AbsSlidingMusicPanelActivity implements
 
     @Override
     public void onLoadFinished(@NonNull Loader<List<Song>> loader, List<Song> data) {
-        if (adapter != null)
-            adapter.swapDataSet(data);
+        songs = data;
+        if (adapter != null) adapter.swapDataSet(com.kabouzeid.gramophone.loader.AlbumLoader.splitIntoAlbums(data));
     }
 
     @Override
     public void onLoaderReset(@NonNull Loader<List<Song>> loader) {
-        if (adapter != null)
-            adapter.swapDataSet(new ArrayList<>());
+        songs = new ArrayList<>();
+        if (adapter != null) adapter.swapDataSet(new ArrayList<>());
     }
 
     private static class AsyncGenreSongLoader extends WrappedAsyncTaskLoader<List<Song>> {

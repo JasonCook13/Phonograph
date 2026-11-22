@@ -282,6 +282,10 @@ public final class ClassicalParser {
 
     /** Where the work ends and the movement begins, or -1. */
     static int splitPoint(String t) {
+        // "Work, Op. 133: Große Fuge" - the library's own convention: a catalogue number, then a colon,
+        // then the movement, whatever the movement is called
+        int only = t.indexOf(": ");
+        if (only > 0 && t.indexOf(": ", only + 1) < 0 && Catalogue.looksClassical(t.substring(0, only))) return only;
         // "Work: I. Allegro" / "Work: Allegro"
         int colon = t.lastIndexOf(':');
         if (colon > 0 && colon < t.length() - 1 && isMovement(t.substring(colon + 1))) return colon;

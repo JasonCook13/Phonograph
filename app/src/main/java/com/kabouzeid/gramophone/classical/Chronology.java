@@ -306,6 +306,15 @@ public final class Chronology {
         return 0.5 * precision + 0.5 * coverage;
     }
 
+    /** How much of the chronology title's words the library title contains (0..1). */
+    public static double similarity(String libraryTitle, String chronoTitle) {
+        Set<String> a = tokens(chronoTitle), b = tokens(libraryTitle);
+        if (a.isEmpty()) return 1;
+        int common = 0;
+        for (String x : a) if (b.contains(x)) common++;
+        return (double) common / a.size();
+    }
+
     private static double similarity(Set<String> a, Set<String> b) {
         if (a.isEmpty() || b.isEmpty()) return 0;
         int common = 0;

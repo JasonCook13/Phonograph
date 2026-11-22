@@ -33,6 +33,14 @@ public class SongGlideRequest {
         final RequestManager requestManager;
         final Song song;
         boolean ignoreMediaStore;
+        java.util.List<String> alternatives;
+
+        /** Other tracks of the album whose folders may hold the cover when the first track's doesn't. */
+        public Builder alternatives(java.util.List<Song> songs) {
+            alternatives = new java.util.ArrayList<>();
+            for (Song s : songs) if (s.data != null) alternatives.add(s.data);
+            return this;
+        }
 
         public static Builder from(@NonNull RequestManager requestManager, Song song) {
             return new Builder(requestManager, song);
@@ -62,7 +70,7 @@ public class SongGlideRequest {
 
         public DrawableRequestBuilder<GlideDrawable> build() {
             //noinspection unchecked
-            return createBaseRequest(requestManager, song, ignoreMediaStore)
+            return createBaseRequest(requestManager, song, ignoreMediaStore, alternatives)
                     .diskCacheStrategy(DEFAULT_DISK_CACHE_STRATEGY)
                     .error(DEFAULT_ERROR_IMAGE)
                     .animate(DEFAULT_ANIMATION)
@@ -79,7 +87,7 @@ public class SongGlideRequest {
 
         public BitmapRequestBuilder<?, Bitmap> build() {
             //noinspection unchecked
-            return createBaseRequest(builder.requestManager, builder.song, builder.ignoreMediaStore)
+            return createBaseRequest(builder.requestManager, builder.song, builder.ignoreMediaStore, builder.alternatives)
                     .asBitmap()
                     .diskCacheStrategy(DEFAULT_DISK_CACHE_STRATEGY)
                     .error(DEFAULT_ERROR_IMAGE)
@@ -99,7 +107,7 @@ public class SongGlideRequest {
 
         public BitmapRequestBuilder<?, BitmapPaletteWrapper> build() {
             //noinspection unchecked
-            return createBaseRequest(builder.requestManager, builder.song, builder.ignoreMediaStore)
+            return createBaseRequest(builder.requestManager, builder.song, builder.ignoreMediaStore, builder.alternatives)
                     .asBitmap()
                     .transcode(new BitmapPaletteTranscoder(context), BitmapPaletteWrapper.class)
                     .diskCacheStrategy(DEFAULT_DISK_CACHE_STRATEGY)
@@ -110,14 +118,18 @@ public class SongGlideRequest {
     }
 
     public static DrawableTypeRequest createBaseRequest(RequestManager requestManager, Song song, boolean ignoreMediaStore) {
+        return createBaseRequest(requestManager, song, ignoreMediaStore, null);
+    }
+
+    public static DrawableTypeRequest createBaseRequest(RequestManager requestManager, Song song, boolean ignoreMediaStore, java.util.List<String> alternatives) {
         if (ignoreMediaStore) {
-            return requestManager.load(new AudioFileCover(song.data));
+            return requestManager.load(new AudioFileCover(song.data, alternatives));
         } else {
             return requestManager.loadFromMediaStore(MusicUtil.getMediaStoreAlbumCoverUri(song.albumId));
         }
     }
 
     public static Key createSignature(Song song) {
-        return new MediaStoreSignature("", song.dateModified, 0);
+        return new MediaStoreSignature("covers-v2", song.dateModified, 0);  // v2: folder and album-wide fallbacks
     }
 }

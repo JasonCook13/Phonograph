@@ -210,6 +210,7 @@ public class AlbumAdapter extends AbsMultiSelectAdapter<AlbumAdapter.ViewHolder,
         if (holder.image == null) return;
 
         SongGlideRequest.Builder.from(Glide.with(activity), album.safeGetFirstSong())
+                .alternatives(album.songs)
                 .checkIgnoreMediaStore(activity)
                 .generatePalette(activity).build()
                 .into(new PhonographColoredTarget(holder.image) {

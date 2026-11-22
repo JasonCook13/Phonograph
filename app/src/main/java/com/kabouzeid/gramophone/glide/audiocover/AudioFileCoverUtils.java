@@ -36,12 +36,27 @@ public class AudioFileCoverUtils {
         } catch (IOException ignored) {
         }
 
-        // Method 2: look for album art in external files
-        final File parent = new File(path).getParentFile();
-        for (String fallback : FALLBACKS) {
-            File cover = new File(parent, fallback);
-            if (cover.exists()) {
-                return new FileInputStream(cover);
+        // Method 2: look for album art in external files: the track's folder, then the folder above it
+        // (a set folder whose work folders have no cover of their own)
+        File parent = new File(path).getParentFile();
+        for (int up = 0; up < 2 && parent != null; up++, parent = parent.getParentFile()) {
+            for (String fallback : FALLBACKS) {
+                File cover = new File(parent, fallback);
+                if (cover.exists()) return new FileInputStream(cover);
+            }
+            if (up == 0) {
+                // any single image in the folder
+                File[] files = parent.listFiles();
+                File only = null;
+                int n = 0;
+                if (files != null) for (File f : files) {
+                    String name = f.getName().toLowerCase();
+                    if (f.isFile() && !name.startsWith("._") && (name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png"))) {
+                        only = f;
+                        n++;
+                    }
+                }
+                if (n == 1) return new FileInputStream(only);
             }
         }
         return null;

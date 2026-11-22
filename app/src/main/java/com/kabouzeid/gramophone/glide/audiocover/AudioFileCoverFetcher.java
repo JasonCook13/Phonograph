@@ -31,20 +31,33 @@ public class AudioFileCoverFetcher implements DataFetcher<InputStream> {
     @Override
     public InputStream loadData(final Priority priority) throws Exception {
 
+        stream = load(model.filePath);
+        // A merged album (singles from several folders, a set with a work folder that has no art):
+        // try the other tracks' folders, one per folder, before giving up.
+        if (stream == null) {
+            java.util.Set<String> folders = new java.util.HashSet<>();
+            folders.add(String.valueOf(new java.io.File(model.filePath).getParent()));
+            for (String alt : model.alternatives) {
+                if (alt == null || !folders.add(String.valueOf(new java.io.File(alt).getParent()))) continue;
+                stream = load(alt);
+                if (stream != null) break;
+                if (folders.size() > 12) break;
+            }
+        }
+        return stream;
+    }
+
+    private static InputStream load(String path) throws Exception {
         final MediaMetadataRetriever retriever = new MediaMetadataRetriever();
         try {
-            retriever.setDataSource(model.filePath);
+            retriever.setDataSource(path);
             byte[] picture = retriever.getEmbeddedPicture();
-            if (picture != null) {
-                stream = new ByteArrayInputStream(picture);
-            } else {
-                stream = AudioFileCoverUtils.fallback(model.filePath);
-            }
+            if (picture != null) return new ByteArrayInputStream(picture);
+        } catch (Exception ignored) {
         } finally {
             try { retriever.release(); } catch (Exception ignored) { }
         }
-
-        return stream;
+        return AudioFileCoverUtils.fallback(path);
     }
 
     @Override

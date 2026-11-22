@@ -44,6 +44,8 @@ public final class ComposerLibrary {
     }
 
     public static final class Work {
+        /** Stable id within the library (used to open a work's page). */
+        public final String key;
         public final String title;
         public final String category;
         /** Folder group: "Orchestral", "Chamber & Instrumental", ... */
@@ -52,7 +54,8 @@ public final class ComposerLibrary {
         public final List<Recording> recordings = new ArrayList<>();
         final String catalogueSort;
 
-        Work(String title, String group, String category, Chronology.Work chrono, String catalogueSort) {
+        Work(String key, String title, String group, String category, Chronology.Work chrono, String catalogueSort) {
+            this.key = key;
             this.title = title;
             this.group = group;
             this.category = category;
@@ -61,7 +64,10 @@ public final class ComposerLibrary {
         }
 
         public String catalogue() {
-            return chrono != null && !chrono.catalogue.isEmpty() ? chrono.catalogue : catalogueSort;
+            if (chrono == null || chrono.catalogue.isEmpty()) return catalogueSort;
+            // "Op. 18/3" (a set member's own number) says more than the entry's "Op. 18"
+            if (catalogueSort.startsWith(chrono.catalogue + "/")) return chrono.catalogue + " No. " + catalogueSort.substring(chrono.catalogue.length() + 1);
+            return chrono.catalogue;
         }
 
         /** The recording to play by default: the one with the most movements. */
@@ -106,6 +112,59 @@ public final class ComposerLibrary {
             for (Work w : works) n += w.trackCount();
             return n;
         }
+
+        @Nullable
+        public Work findWork(String key) {
+            for (Work w : works) if (w.key.equals(key)) return w;
+            return null;
+        }
+    }
+
+    /** One album holding several works of one type ("The Complete String Quartets" under String Quartets). */
+    public static final class Set {
+        public final String album, performers;
+        public final List<Work> works = new ArrayList<>();
+        public int tracks;
+        public long duration;
+
+        Set(String album, String performers) {
+            this.album = album;
+            this.performers = performers;
+        }
+    }
+
+    /** Recordings of a work that belong to an album. */
+    public static List<Recording> recordingsOn(Work w, String album) {
+        List<Recording> out = new ArrayList<>();
+        for (Recording r : w.recordings) if (r.album.equals(album)) out.add(r);
+        return out;
+    }
+
+    /** Splits a type's works into sets (albums with at least two of them, biggest first) and the rest,
+     *  in the given order. A work on a set's album is listed inside that set, not on its own. */
+    public static List<Object> setsAndLooseWorks(List<Work> works) {
+        LinkedHashMap<String, Set> sets = new LinkedHashMap<>();
+        for (Work w : works) {
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            for (Recording r : w.recordings) {
+                if (r.album.isEmpty() || !seen.add(r.album)) continue;
+                Set set = sets.get(r.album);
+                if (set == null) sets.put(r.album, set = new Set(r.album, r.performers));
+                set.works.add(w);
+                set.tracks += r.tracks.size();
+                for (Song s : r.tracks) set.duration += s.duration;
+            }
+        }
+        List<Set> real = new ArrayList<>();
+        for (Set set : sets.values()) if (set.works.size() >= 2) real.add(set);
+        Collections.sort(real, (a, b) -> b.works.size() - a.works.size());
+        List<Object> out = new ArrayList<>(real);
+        for (Work w : works) {
+            boolean inSet = false;
+            for (Set set : real) if (set.works.contains(w)) inSet = true;
+            if (!inSet) out.add(w);
+        }
+        return out;
     }
 
     public enum Sort {COMPOSITION, CATALOGUE, TITLE}
@@ -351,13 +410,21 @@ public final class ComposerLibrary {
 
             String workTitle = info.chrono != null ? info.chrono.title : info.work;
             String workKey = composerKey + "\u0000" + (info.chrono != null ? "#" + info.chrono.order : Chronology.norm(info.work));
+            // A chronology entry that covers a set ("Six String Quartets, Op. 18") must not swallow the
+            // six quartets as one work: a track whose own number goes past the entry's ("Op. 18 No. 3")
+            // is its own work, titled as the library has it, sorted inside the entry by that number.
+            String subKey = setMember(info);
+            if (subKey != null) {
+                workKey += "/" + subKey;
+                workTitle = info.work;
+            }
             Work work = works.get(workKey);
             if (work == null) {
                 String cat = info.catalogueKeys.isEmpty() ? "" : displayCatalogue(info.catalogueKeys.get(0));
                 String[] where = folderLocation(s.data);
                 String category = where != null ? where[1] : info.category;
                 String group = where != null ? where[0] : groupOf(info.category);
-                work = new Work(prettyWorkTitle(workTitle, info.work), group, category, info.chrono, cat);
+                work = new Work(workKey, prettyWorkTitle(workTitle, info.work), group, category, info.chrono, cat);
                 works.put(workKey, work);
                 composer.works.add(work);
             }
@@ -382,6 +449,18 @@ public final class ComposerLibrary {
         List<Composer> list = new ArrayList<>(composers.values());
         Collections.sort(list, (a, b) -> a.sortName().compareTo(b.sortName()));
         return new ComposerLibrary(list);
+    }
+
+    /** "op 18 3" when the track is No. 3 of a chronology entry catalogued "Op. 18"; else null. */
+    private static String setMember(ClassicalParser.Info info) {
+        if (info.chrono == null || info.catalogueKeys.isEmpty() || info.chrono.catalogue.isEmpty()) return null;
+        String entry = Chronology.norm(info.chrono.catalogue);
+        if (entry.isEmpty()) return null;
+        for (String k : info.catalogueKeys) {
+            if (k.equals(entry)) return null;              // exactly the entry: an ordinary match
+            if (k.startsWith(entry + " ") && k.substring(entry.length() + 1).matches("\\d{1,2}[a-z]?")) return k;
+        }
+        return null;
     }
 
     /** Movement number when known, otherwise disc/track order, otherwise file name. */
@@ -427,7 +506,11 @@ public final class ComposerLibrary {
                 // Catalogued works in order of composition; the rest after them, by title.
                 cmp = (a, b) -> {
                     if ((a.chrono == null) != (b.chrono == null)) return a.chrono == null ? 1 : -1;
-                    if (a.chrono != null) return a.chrono.order - b.chrono.order;
+                    if (a.chrono != null && a.chrono.order != b.chrono.order) return a.chrono.order - b.chrono.order;
+                    if (a.chrono != null) {   // members of one set, in catalogue order
+                        int c = naturalCompare(a.catalogueSort, b.catalogueSort);
+                        if (c != 0) return c;
+                    }
                     return byTitle.compare(a, b);
                 };
         }
@@ -620,8 +703,12 @@ public final class ComposerLibrary {
     }
 
     /** Prefer the chronology's title, but keep the track's when it is more specific. */
+    /** The library's own title when it says at least as much as the chronology's terse one
+     *  ("String Quartet No. 14 in C-sharp minor, Op. 131" over "String Quartet in C-sharp minor"). */
     private static String prettyWorkTitle(String chronoTitle, String trackWork) {
         if (chronoTitle == null || chronoTitle.isEmpty()) return trackWork;
+        if (trackWork != null && trackWork.length() >= chronoTitle.length()
+                && Chronology.similarity(trackWork, chronoTitle) >= 0.5) return trackWork;
         return chronoTitle;
     }
 }
