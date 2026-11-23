@@ -11,6 +11,9 @@ import androidx.appcompat.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import com.kabouzeid.gramophone.model.Album;
+import android.view.ViewGroup;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.afollestad.materialcab.MaterialCab;
@@ -36,7 +39,8 @@ import java.util.List;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 
-/** A genre's albums (tap one for its tracks); shuffle plays all its songs. */
+/** A genre as shelves: each artist (composers, for Soundtracks) with their albums in release order;
+ *  tap a cover for its tracks. Soundtracks can switch to Films A–Z. Shuffle plays the whole genre. */
 public class GenreDetailActivity extends AbsSlidingMusicPanelActivity implements CabHolder, LoaderManager.LoaderCallbacks<List<Song>> {
 
     private static final int LOADER_ID = LoaderIds.GENRE_DETAIL_ACTIVITY;
@@ -53,8 +57,12 @@ public class GenreDetailActivity extends AbsSlidingMusicPanelActivity implements
     private Genre genre;
 
     private MaterialCab cab;
-    private com.kabouzeid.gramophone.adapter.album.AlbumAdapter adapter;
+    private ShelfAdapter adapter;
+    private com.kabouzeid.gramophone.adapter.album.AlbumAdapter filmsAdapter;
     private List<Song> songs = new ArrayList<>();
+    private List<Album> albums = new ArrayList<>();
+    private boolean soundtracks, filmsAZ;
+    private TextView summary;
 
     private RecyclerView.Adapter wrappedAdapter;
 
@@ -84,19 +92,9 @@ public class GenreDetailActivity extends AbsSlidingMusicPanelActivity implements
 
     private void setUpRecyclerView() {
         ViewUtil.setUpFastScrollRecyclerViewColor(this, ((FastScrollRecyclerView) recyclerView), ThemeStore.accentColor(this));
-        int columns = getResources().getConfiguration().orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE ? 4 : 2;
-        recyclerView.setLayoutManager(new androidx.recyclerview.widget.GridLayoutManager(this, columns));
-
-        adapter = new com.kabouzeid.gramophone.adapter.album.AlbumAdapter(this, new ArrayList<>(), R.layout.item_grid, false, this);
-        recyclerView.setAdapter(adapter);
-
-        adapter.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
-            @Override
-            public void onChanged() {
-                super.onChanged();
-                checkIsEmpty();
-            }
-        });
+        soundtracks = genre.name != null && genre.name.trim().equalsIgnoreCase("Soundtracks");
+        adapter = new ShelfAdapter();
+        showShelves();
     }
 
     private void setUpToolBar() {
@@ -155,9 +153,217 @@ public class GenreDetailActivity extends AbsSlidingMusicPanelActivity implements
     }
 
     private void checkIsEmpty() {
-        empty.setVisibility(
-                adapter.getItemCount() == 0 ? View.VISIBLE : View.GONE
-        );
+        empty.setVisibility(albums.isEmpty() ? View.VISIBLE : View.GONE);
+    }
+
+    private void showShelves() {
+        filmsAZ = false;
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setAdapter(adapter);
+    }
+
+    /** Soundtracks: every film as a cover grid, A–Z. */
+    private void showFilms() {
+        filmsAZ = true;
+        int columns = getResources().getConfiguration().orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE ? 4 : 2;
+        final androidx.recyclerview.widget.GridLayoutManager lm = new androidx.recyclerview.widget.GridLayoutManager(this, columns);
+        recyclerView.setLayoutManager(lm);
+        List<Album> byTitle = new ArrayList<>(albums);
+        java.util.Collections.sort(byTitle, (a, b) -> sortKey(a.getTitle()).compareTo(sortKey(b.getTitle())));
+        filmsAdapter = new com.kabouzeid.gramophone.adapter.album.AlbumAdapter(this, byTitle, R.layout.item_grid, false, this);
+        recyclerView.setAdapter(filmsAdapter);
+    }
+
+    private static String sortKey(String s) {
+        if (s == null) return "";
+        String l = s.trim().toLowerCase(java.util.Locale.ROOT);
+        for (String a : new String[]{"the ", "a ", "an "}) if (l.startsWith(a)) l = l.substring(a.length());
+        return java.text.Normalizer.normalize(l, java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+    }
+
+    /** Who an album belongs to on this page: the composer for a soundtrack
+     *  (.../Soundtracks/<Film>/<Composer>/track), otherwise the album artist. */
+    private String ownerOf(Album album) {
+        if (soundtracks) {
+            String path = album.safeGetFirstSong().data;
+            if (path != null) {
+                String[] seg = path.replace('\\', '/').split("/");
+                for (int i = 0; i + 3 < seg.length; i++) {
+                    if (seg[i].equalsIgnoreCase("Soundtracks")) return seg[i + 2];
+                }
+            }
+        }
+        String a = album.getArtistName();
+        return a == null || a.trim().isEmpty() ? "Unknown artist" : a.trim();
+    }
+
+    private static final class Shelf {
+        final String owner;
+        final List<Album> albums = new ArrayList<>();
+
+        Shelf(String owner) {
+            this.owner = owner;
+        }
+    }
+
+    private final List<Shelf> shelves = new ArrayList<>();
+
+    private void buildShelves() {
+        java.util.LinkedHashMap<String, Shelf> by = new java.util.LinkedHashMap<>();
+        for (Album a : albums) {
+            String o = ownerOf(a);
+            String k = sortKey(o);
+            Shelf s = by.get(k);
+            if (s == null) by.put(k, s = new Shelf(o));
+            s.albums.add(a);
+        }
+        shelves.clear();
+        shelves.addAll(by.values());
+        for (Shelf s : shelves) {
+            java.util.Collections.sort(s.albums, (a, b) -> {
+                int ya = a.getYear() > 0 ? a.getYear() : 99999, yb = b.getYear() > 0 ? b.getYear() : 99999;
+                return ya != yb ? ya - yb : sortKey(a.getTitle()).compareTo(sortKey(b.getTitle()));
+            });
+        }
+        java.util.Collections.sort(shelves, (a, b) -> {
+            boolean va = a.owner.toLowerCase().startsWith("various"), vb = b.owner.toLowerCase().startsWith("various");
+            if (va != vb) return va ? 1 : -1;
+            return sortKey(a.owner).compareTo(sortKey(b.owner));
+        });
+    }
+
+    /** Row 0: summary (and the Composers / Films A–Z switch); then one shelf per artist. */
+    private class ShelfAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
+            implements FastScrollRecyclerView.SectionedAdapter {
+        @Override
+        public int getItemCount() {
+            return shelves.size() + 1;
+        }
+
+        @Override
+        public int getItemViewType(int position) {
+            return position == 0 ? 0 : 1;
+        }
+
+        @NonNull
+        @Override
+        public String getSectionName(int position) {
+            return position == 0 ? "" : com.kabouzeid.gramophone.util.MusicUtil.getSectionName(sortKey(shelves.get(position - 1).owner));
+        }
+
+        @NonNull
+        @Override
+        public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            return viewType == 0 ? new TopHolder() : new ShelfHolder();
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+            if (holder instanceof TopHolder) ((TopHolder) holder).bind();
+            else ((ShelfHolder) holder).bind(shelves.get(position - 1));
+        }
+    }
+
+    private int dp(int v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    private class TopHolder extends RecyclerView.ViewHolder {
+        final TextView text;
+        final LinearLayout toggle;
+
+        TopHolder() {
+            super(new LinearLayout(GenreDetailActivity.this));
+            LinearLayout l = (LinearLayout) itemView;
+            l.setOrientation(LinearLayout.VERTICAL);
+            l.setPadding(dp(16), dp(10), dp(16), dp(4));
+            l.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            text = new TextView(GenreDetailActivity.this);
+            text.setTextAppearance(GenreDetailActivity.this, R.style.TextAppearance_AppCompat_Body1);
+            l.addView(text);
+            toggle = new LinearLayout(GenreDetailActivity.this);
+            toggle.setOrientation(LinearLayout.HORIZONTAL);
+            l.addView(toggle);
+        }
+
+        void bind() {
+            int n = shelves.size();
+            text.setText(n + (soundtracks ? (n == 1 ? " composer · " : " composers · ") : (n == 1 ? " artist · " : " artists · "))
+                    + albums.size() + (soundtracks ? (albums.size() == 1 ? " film" : " films") : (albums.size() == 1 ? " album" : " albums")));
+            toggle.removeAllViews();
+            toggle.setVisibility(soundtracks ? View.VISIBLE : View.GONE);
+            if (!soundtracks) return;
+            int gold = com.kabouzeid.gramophone.util.BrandColors.goldText(GenreDetailActivity.this);
+            String[] labels = {"Composers", "Films A–Z"};
+            for (int i = 0; i < 2; i++) {
+                if (i == 1) {
+                    TextView dot = new TextView(GenreDetailActivity.this);
+                    dot.setText("·");
+                    toggle.addView(dot);
+                }
+                TextView t = new TextView(GenreDetailActivity.this);
+                t.setText(labels[i]);
+                t.setPadding(dp(8), dp(10), dp(8), dp(10));
+                boolean active = (i == 1) == filmsAZ;
+                if (active) {
+                    t.setTextColor(gold);
+                    t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+                } else {
+                    t.setAlpha(0.7f);
+                    final boolean films = i == 1;
+                    t.setOnClickListener(v -> {
+                        if (films) showFilms();
+                        else showShelves();
+                    });
+                }
+                toggle.addView(t);
+            }
+        }
+    }
+
+    private class ShelfHolder extends RecyclerView.ViewHolder {
+        final TextView name, count;
+        final RecyclerView row;
+
+        ShelfHolder() {
+            super(new LinearLayout(GenreDetailActivity.this));
+            LinearLayout l = (LinearLayout) itemView;
+            l.setOrientation(LinearLayout.VERTICAL);
+            l.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            View line = new View(GenreDetailActivity.this);
+            line.setBackgroundColor(com.kabouzeid.appthemehelper.util.ATHUtil.resolveColor(GenreDetailActivity.this, R.attr.dividerColor));
+            l.addView(line, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp(1) / 2)));
+            LinearLayout head = new LinearLayout(GenreDetailActivity.this);
+            head.setOrientation(LinearLayout.HORIZONTAL);
+            head.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            head.setPadding(dp(16), dp(10), dp(16), dp(2));
+            name = new TextView(GenreDetailActivity.this);
+            name.setTextAppearance(GenreDetailActivity.this, R.style.TextAppearance_AppCompat_Subhead);
+            name.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            name.setTextColor(com.kabouzeid.gramophone.util.BrandColors.goldText(GenreDetailActivity.this));
+            head.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            count = new TextView(GenreDetailActivity.this);
+            count.setTextAppearance(GenreDetailActivity.this, R.style.TextAppearance_AppCompat_Caption);
+            head.addView(count);
+            l.addView(head);
+            row = new RecyclerView(GenreDetailActivity.this);
+            row.setLayoutManager(new LinearLayoutManager(GenreDetailActivity.this, LinearLayoutManager.HORIZONTAL, false));
+            row.setNestedScrollingEnabled(false);
+            l.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+
+        void bind(Shelf s) {
+            name.setText(s.owner);
+            count.setText(s.albums.size() + " ›");
+            row.setAdapter(new com.kabouzeid.gramophone.adapter.album.HorizontalAlbumAdapter(GenreDetailActivity.this, s.albums, false, GenreDetailActivity.this));
+            View.OnClickListener open = v -> {
+                Album first = s.albums.get(0);
+                if (soundtracks || s.owner.toLowerCase().startsWith("various")) return;
+                com.kabouzeid.gramophone.util.NavigationUtil.goToArtist(GenreDetailActivity.this, first.getArtistId());
+            };
+            name.setOnClickListener(open);
+            count.setOnClickListener(open);
+        }
     }
 
     @Override
@@ -185,13 +391,19 @@ public class GenreDetailActivity extends AbsSlidingMusicPanelActivity implements
     @Override
     public void onLoadFinished(@NonNull Loader<List<Song>> loader, List<Song> data) {
         songs = data;
-        if (adapter != null) adapter.swapDataSet(com.kabouzeid.gramophone.loader.AlbumLoader.splitIntoAlbums(data));
+        albums = com.kabouzeid.gramophone.loader.AlbumLoader.splitIntoAlbums(data);
+        buildShelves();
+        if (adapter != null) adapter.notifyDataSetChanged();
+        if (filmsAZ) showFilms();
+        checkIsEmpty();
     }
 
     @Override
     public void onLoaderReset(@NonNull Loader<List<Song>> loader) {
         songs = new ArrayList<>();
-        if (adapter != null) adapter.swapDataSet(new ArrayList<>());
+        albums = new ArrayList<>();
+        shelves.clear();
+        if (adapter != null) adapter.notifyDataSetChanged();
     }
 
     private static class AsyncGenreSongLoader extends WrappedAsyncTaskLoader<List<Song>> {
